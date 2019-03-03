@@ -1,0 +1,43 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug 'x3'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=x3"],
+        "filter": {
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug 'x3' cli-DEcode",
+      "program": "${workspaceFolder}/target/debug/x3",
+      "args": ["--input", "test.x3a", "--output", "test.wav"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_BACKTRACE": "1"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug 'x3' cli-ENcode",
+      "program": "${workspaceFolder}/target/debug/x3",
+      "args": ["--input", "/home/simon/Projects/GIFT-Project/x3/matlab/test.wav", "--output", "test.x3a"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_BACKTRACE": "1"
+      }
+    }
+  ]
+}

@@ -55,11 +55,11 @@ fn main() {
   let mut n = 0;
   for sample in samples {
     if n == 16 {
-      println!("");
+      println!();
       n = 0;
     }
     n += 1;
     print!("{} ", sample);
   }
-  println!("");
+  println!();
 }

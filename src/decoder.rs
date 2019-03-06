@@ -278,9 +278,9 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16, blo
     // Otherwise, this is a BFP-encoded block with E + 1 bits/word
     let neg_thresh = 1 << (num_bits - 1);
     let neg = 1 << num_bits;
-    let mut value = *last_wav as i32;
+    let mut value = i32::from(*last_wav);
     for wav_value in wav.iter_mut().take(block_len) {
-      let mut diff = br.read_nbits(num_bits)? as i32;
+      let mut diff = i32::from(br.read_nbits(num_bits)?);
 
       // Need to convert this to a signed integer
       if diff > neg_thresh {

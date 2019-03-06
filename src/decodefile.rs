@@ -179,12 +179,12 @@ fn parse_xml(xml: &str) -> Result<(u32, x3::Parameters), X3Error> {
 //
 //
 
-#[cfg(test)]
-mod tests {
-  use crate::decodefile::x3a_to_wav;
+// #[cfg(test)]
+// mod tests {
+//   use crate::decodefile::x3a_to_wav;
 
-  // #[test]
-  fn test_decodefile() {
-    x3a_to_wav("~/x3/rust/test.x3a", "~/x3/rust/test-test.wav").unwrap();
-  }
-}
+//   #[test]
+//   fn test_decodefile() {
+//     x3a_to_wav("~/x3/rust/test.x3a", "~/x3/rust/test-test.wav").unwrap();
+//   }
+// }

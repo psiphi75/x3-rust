@@ -332,7 +332,7 @@ fn encode_bfp_block(
   if num_bits >= 15 {
     bp.write_bits(15, BFP_HDR_LEN)?;
     // We write all the bytes out without any compression
-    let mut w = wav[0] as i32;
+    let mut w = i32::from(wav[0]);
     for wd in wav_diff.iter().take(block_len) {
       w += *wd as i32;
       bp.write_bits(w as usize, 16)?;

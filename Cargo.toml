@@ -3,7 +3,6 @@ name = "x3"
 version = "0.1.0"
 authors = ["Simon M. Werner <simonwerner@gmail.com>"]
 license = "GPL-v3"
-license_file = "LICENSE"
 readme = "README.md"
 edition = "2018"
 

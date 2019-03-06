@@ -33,7 +33,18 @@
       "request": "launch",
       "name": "Debug 'x3' cli-ENcode",
       "program": "${workspaceFolder}/target/debug/x3",
-      "args": ["--input", "/home/simon/Projects/GIFT-Project/x3/matlab/test.wav", "--output", "test.x3a"],
+      "args": ["--input", "${workspaceFolder}/x3-matlab/test.wav", "--output", "test.x3a"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_BACKTRACE": "1"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug 'wav_to_str",
+      "program": "${workspaceFolder}/target/debug/wav_to_str",
+      "args": ["--wav", "${workspaceFolder}/test/test.wav"],
       "cwd": "${workspaceFolder}",
       "env": {
         "RUST_BACKTRACE": "1"

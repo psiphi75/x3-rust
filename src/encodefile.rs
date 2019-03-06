@@ -125,3 +125,17 @@ fn create_archive_header(ch: &x3::Channel, bp: &mut BitPacker) -> Result<(), X3E
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use crate::encodefile::wav_to_x3a;
+
+  #[test]
+  fn test_encodefile() {
+    wav_to_x3a(
+      "~/../../../sounds/15s/NO96_15s.wav",
+      "~/test.wav",
+    )
+    .unwrap();
+  }
+}

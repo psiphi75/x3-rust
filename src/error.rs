@@ -29,13 +29,17 @@ pub enum X3Error {
 
   // Custom X3 Errors
   InvalidEncodingThresh, // Threshold must be less than or equal to code.offset
-  InvalidArrayLen,       // Array lengths are not compatible
+  InvalidArrayLen,       // Array lengths are not compatible.
+  OutOfBoundsInverse,    // The value is out-of-bounds for the .inv array.
   MoreThanOneChannel,    // FIXME: We need to support more than one channel
 
   // X3 Archive Header errors
   ArchiveHeaderXMLInvalid,    // XML is poorly structured
   ArchiveHeaderXMLRiceCode,   // XML has invalid rice code
   ArchiveHeaderXMLInvalidKey, // Invalid archive key 'X3ARHIV'
+
+  // Frame issues
+  FrameLength, // The frame is too long
 
   // Frame header issues
   FrameHeaderInvalidKey, // The frame header is missing 'x3'

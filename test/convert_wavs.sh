@@ -17,8 +17,13 @@ SOUNDS=$(ls $SOUND_DIR/*.wav)
 for WAV in ${SOUNDS}
 do
 
+  echo "Encoding ${WAV} to ${TEMP_X3A}"
   $X3 --input $WAV --output $TEMP_X3A
+
+  echo "Decoding ${TEMP_X3A} to ${TEMP_WAV}"
   $X3 --input $TEMP_X3A --output $TEMP_WAV
+
+  echo
 
 done
 

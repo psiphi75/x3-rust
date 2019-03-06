@@ -80,7 +80,7 @@ pub fn decode_frames(br: &mut BitReader, params: &x3::Parameters) -> Result<Vec<
       Ok(result) => total_samples_written += result,
       Err(_) => match find_next_frame(br) {
         Ok(()) => (),
-        Err(_) => (), // this is okay, since we only hit the end of the array
+        Err(_) => eprintln!("An error occurred decoding a frame"), // this is okay, since we only hit the end of the array
       },
     };
   }
@@ -111,7 +111,6 @@ pub fn decode_frame(
     return Err(X3Error::FrameDecodeUnexpectedEnd);
   }
 
-  let mut last_wav = br.read_be_i16()?;
   // Frames are word aligned
   br.word_align();
 
@@ -120,6 +119,7 @@ pub fn decode_frame(
   let (ns, x3) = get_frame_payload(br)?;
   br.set_boundary(x3.len())?;
 
+  let mut last_wav = br.read_be_i16()?;
   let mut remaining_samples = ns - 1;
   let mut samples_written = 0;
 
@@ -161,7 +161,7 @@ pub fn get_frame_payload(br: &mut BitReader) -> Result<(usize, IntoIter<u8>), X3
   if !br.eq(x3::FrameHeader::KEY_BUF)? {
     return Err(X3Error::FrameHeaderInvalidKey);
   }
-  br.inc_counter_n_bytes(x3::Archive::ID.len())?;
+  br.inc_counter_n_bytes(x3::FrameHeader::KEY_BUF.len())?;
 
   // <Source Id>
   // Currently just skip it
@@ -178,6 +178,9 @@ pub fn get_frame_payload(br: &mut BitReader) -> Result<(usize, IntoIter<u8>), X3
 
   // <Payload Length>
   let payload_len = br.read_be_u16()? as usize;
+  if payload_len >= x3::Frame::MAX_LENGTH {
+    return Err(X3Error::FrameLength);
+  }
 
   // <Time>
   // Skip time
@@ -252,6 +255,9 @@ fn decode_ricecode_block(
       let n = br.read_zero_bits()? as i16;
       let r = br.read_nbits(nb)? as i16;
       let i = r + (1 << code.nsubs) * (n - 1);
+      if i as usize >= code.inv_len {
+        return Err(X3Error::OutOfBoundsInverse);
+      }
       let diff = code.inv[i as usize];
       *last_wav += diff;
       *wav_value = *last_wav;

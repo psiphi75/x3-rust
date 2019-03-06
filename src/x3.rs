@@ -103,6 +103,11 @@ impl Archive {
   pub const ID_LEN: usize = 8;
 }
 
+pub struct Frame {}
+impl Frame {
+  pub const MAX_LENGTH: usize = 0x7fe0;
+}
+
 pub struct FrameHeader {}
 impl FrameHeader {
   /// The length of the header
@@ -123,6 +128,7 @@ pub struct RiceCode {
   pub code: &'static [usize],
   pub num_bits: &'static [usize],
   pub inv: &'static [i16],
+  pub inv_len: usize, // The length of inv that is used for this.
 }
 
 pub struct RiceCodes {}
@@ -143,6 +149,7 @@ impl RiceCodes {
       code: &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
       num_bits: &[12, 10, 8, 6, 4, 2, 1, 3, 5, 7, 9, 11, 13, 15],
       inv: INV_RICE_CODE,
+      inv_len: 16,
     },
     RiceCode {
       nsubs: 1,
@@ -150,6 +157,7 @@ impl RiceCodes {
       code: &[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
       num_bits: &[12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
       inv: INV_RICE_CODE,
+      inv_len: 26,
     },
     RiceCode {
       nsubs: 2,
@@ -163,6 +171,7 @@ impl RiceCodes {
         10, 11, 11, 12, 12,
       ],
       inv: INV_RICE_CODE,
+      inv_len: 44,
     },
     RiceCode {
       nsubs: 3,
@@ -176,6 +185,7 @@ impl RiceCodes {
         6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10,
       ],
       inv: INV_RICE_CODE,
+      inv_len: 60,
     },
   ];
 

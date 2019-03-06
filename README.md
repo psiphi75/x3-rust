@@ -8,7 +8,8 @@ ratio. The name comes from the compression factor that it usually achieves, i.e.
 The algorithm is described in a paper in the [Journal of the Acoustical Society of
 America 133:1387-1398, 2013](http://link.aip.org/link/?JAS/133/1387).
 
-This repository is a Rust port of the Matlab code from the [original authors](https://www.soundtags.org/dtags/audio_compression/).
+This repository is a Rust port of the Matlab code from the
+[original authors](https://www.soundtags.org/dtags/audio_compression/).
 
 ## Code usage
 
@@ -73,7 +74,7 @@ Example:
 
 The following items need to be worked on:
 
-- Inform user if there were issues with decoding frames
+- Inform user if there were issues with decoding frames.
 - Error handling could be better.
 - Add multiple channel capability.
 - Explicity use a `#![no_std]` option for embedded devices.

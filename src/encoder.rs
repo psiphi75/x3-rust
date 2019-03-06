@@ -61,7 +61,7 @@ pub fn encode(channels: &[&x3::Channel], bp: &mut BitPacker) -> Result<(), X3Err
 
   let t = (stats[0] + stats[1] + stats[2] + stats[3] + stats[4] + stats[5]) as f32;
   println!(
-    "\nStatistics:\n  Rice-0: {:.2}%\n  Rice-1: {:.2}%\n  Rice-2: {:.2}%\n  Rice-3: {:.2}%\n  BFP: {:.2}%\n  Pass-through {:.2}%\n",
+    "\nStatistics:\n  Rice-0: {:.4}%\n  Rice-1: {:.4}%\n  Rice-2: {:.4}%\n  Rice-3: {:.4}%\n  BFP: {:.4}%\n  Pass-through {:.4}%\n",
     (stats[0] as f32 / t) * 100.0,
     (stats[1] as f32 / t) * 100.0,
     (stats[2] as f32 / t) * 100.0,
@@ -307,11 +307,11 @@ fn encode_rice_block(
   for w in wav_diff.iter().take(block_len) {
     let ii = (*w + offset as i32) as usize;
     let code = codes[ii];
-    let num_bits = num_bits[ii];
-    let num_zeros = num_bits - count_bits(code);
+    let rc_num_bits = num_bits[ii];
+    let num_zeros = rc_num_bits - count_bits(code);
 
     bp.write_packed_zeros(num_zeros)?;
-    bp.write_bits(code, num_bits - num_zeros)?;
+    bp.write_bits(code, rc_num_bits - num_zeros)?;
   }
 
   Ok(rc.nsubs)
@@ -327,20 +327,19 @@ fn encode_bfp_block(
   let ftype: usize; // find which code to use
 
   // number of bits needed to represent right-justified samples
-  let mut num_bits = count_bits(max_abs_inp_filtd as usize); // number of bits
-  if num_bits == 16 {
-    // 15 and 16 bit lengths, output as 16 bit.
-    num_bits = 15
-  };
-  bp.write_bits(num_bits as usize, BFP_HDR_LEN)?;
+  let num_bits = count_bits(max_abs_inp_filtd as usize); // number of bits
 
-  if num_bits == 15 {
+  if num_bits >= 15 {
+    bp.write_bits(15, BFP_HDR_LEN)?;
     // We write all the bytes out without any compression
-    for w in wav.iter().take(block_len).skip(1) {
-      bp.write_bits(*w as usize, num_bits + 1)?;
+    let mut w = wav[0] as i32;
+    for wd in wav_diff.iter().take(block_len) {
+      w += *wd as i32;
+      bp.write_bits(w as usize, 16)?;
     }
     ftype = 5;
   } else {
+    bp.write_bits(num_bits as usize, BFP_HDR_LEN)?;
     // Reduce the number of bits only.
     for wd in wav_diff.iter().take(block_len) {
       bp.write_bits(*wd as usize, num_bits + 1)?;
@@ -609,7 +608,7 @@ mod tests {
     // Check output is okay
     let expected_x3_output: &[u8] = &[
       62, 250, 4, 71, 75, 230, 252, 150, 153, 97, 24, 220, 83, 53, 143, 92, 101, 211, 155, 34, 73, 241, 221, 200, 202,
-      252, 149, 240, 72, 20, 156, 172, 146, 59, 245, 23, 131, 33, 100, 0,
+      252, 149, 240, 72, 20, 156, 172, 146, 59, 245, 23, 131, 33, 103, 33, 100, 0,
     ];
 
     assert_eq!(expected_x3_output, bp.as_bytes().unwrap());
@@ -660,7 +659,7 @@ mod tests {
     encoder::encode(&[&first_channel], bp).unwrap();
 
     // Get the bytes
-    let x3_bytes = bp.as_bytes().unwrap();
+    let _x3_bytes = bp.as_bytes().unwrap();
   }
 
 }

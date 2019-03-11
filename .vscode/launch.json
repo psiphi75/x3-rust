@@ -31,9 +31,21 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug 'x3' cli-ENcode",
+      "name": "Debug 'x3' cli-ENcode (x3a)",
       "program": "${workspaceFolder}/target/debug/x3",
       "args": ["--input", "${workspaceFolder}/x3-matlab/test.wav", "--output", "test.x3a"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_BACKTRACE": "1"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug 'x3' cli-ENcode (bin)",
+      "cargo": { "args": ["build", "--features", "oceaninstruments", "--bin", "x3"] },
+      "program": "${workspaceFolder}/target/debug/x3",
+      "args": ["--input", "${workspaceFolder}/../OceanInstruments/STstreamTest.bin", "--output", "test.wav"],
       "cwd": "${workspaceFolder}",
       "env": {
         "RUST_BACKTRACE": "1"

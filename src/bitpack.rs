@@ -20,7 +20,7 @@
  **************************************************************************/
 
 // externs
-use crate::byteorder::{BigEndian, ByteOrder};
+use crate::byteorder::{BigEndian, ByteOrder, LittleEndian};
 
 #[derive(Debug)]
 pub enum BitPackError {
@@ -382,7 +382,7 @@ impl<'a> BitReader<'a> {
   }
 
   ///
-  /// Read the next two bytes as bigendian u16.
+  /// Read the next two bytes as big-endian u16.
   ///
   pub fn read_be_u16(&mut self) -> Result<u16, BitPackError> {
     if self.p_bit != 0 {
@@ -395,13 +395,25 @@ impl<'a> BitReader<'a> {
   }
 
   ///
-  /// Read the next two bytes as bigendian i16.
+  /// Read the next two bytes as big-endian i16.
   ///
   pub fn read_be_i16(&mut self) -> Result<i16, BitPackError> {
     if self.p_bit != 0 {
       return Err(BitPackError::NotByteAligned);
     }
     let value = BigEndian::read_i16(&self.array[self.p_byte..]);
+    self.p_byte += 2;
+    Ok(value)
+  }
+
+  ///
+  /// Read the next two bytes as little-endian i16.
+  ///
+  pub fn read_le_i16(&mut self) -> Result<i16, BitPackError> {
+    if self.p_bit != 0 {
+      return Err(BitPackError::NotByteAligned);
+    }
+    let value = LittleEndian::read_i16(&self.array[self.p_byte..]);
     self.p_byte += 2;
     Ok(value)
   }

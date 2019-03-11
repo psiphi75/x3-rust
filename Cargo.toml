@@ -4,7 +4,6 @@ description = "A CPU efficient audio encoder/decoder using the X3 codec."
 version = "0.1.0"
 authors = ["Simon M. Werner <simonwerner@gmail.com>"]
 license = "GPL-3.0-or-later"
-license-file = "LICENSE"
 readme = "README.md"
 edition = "2018"
 repository = "https://github.com/psiphi75/x3-rust"

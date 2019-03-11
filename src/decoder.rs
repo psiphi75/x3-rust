@@ -25,7 +25,6 @@ use crate::error;
 use crate::x3;
 
 use error::X3Error;
-use std::vec::IntoIter;
 
 // Bad estimator for the total expected length of the output wav file.
 fn estimate_total_length(num_samples: usize, compressed_len: usize, remaining_bytes: usize) -> usize {
@@ -39,8 +38,7 @@ fn estimate_total_length(num_samples: usize, compressed_len: usize, remaining_by
 // Look at the first frame in a sequence of frames, this is just so we can allocate enough memory to
 // process everything.
 fn peek_first_frame(br: &mut BitReader) -> Result<usize, X3Error> {
-  let (payload_samples, x3) = get_frame_payload(br)?;
-  let payload_size = x3.len();
+  let (payload_samples, payload_size) = get_frame_details(br)?;
   let remaining_bytes = br.remaining_bytes()?;
 
   // We are only peeking, let's reset the br.counter to the beginning of the frame
@@ -116,8 +114,8 @@ pub fn decode_frame(
 
   // Get the frame header
   br.reset_boundary();
-  let (ns, x3) = get_frame_payload(br)?;
-  br.set_boundary(x3.len())?;
+  let (ns, payload_size) = get_frame_details(br)?;
+  br.set_boundary(payload_size)?;
 
   let mut last_wav = br.read_be_i16()?;
   let mut remaining_samples = ns - 1;
@@ -151,7 +149,8 @@ pub fn decode_frame(
 ///
 /// * `br` - the data to decode as a BitReader.
 ///
-pub fn get_frame_payload(br: &mut BitReader) -> Result<(usize, IntoIter<u8>), X3Error> {
+#[cfg(not(feature = "oceaninstruments"))]
+pub fn get_frame_details(br: &mut BitReader) -> Result<(usize, usize), X3Error> {
   // Calc header CRC
   let buf = &mut [0u8; x3::FrameHeader::HEADER_CRC_BYTE];
   br.peek_bytes(buf)?;
@@ -201,7 +200,7 @@ pub fn get_frame_payload(br: &mut BitReader) -> Result<(usize, IntoIter<u8>), X3
     return Err(X3Error::FrameHeaderInvalidPayloadCRC);
   }
 
-  Ok((num_samples, payload.into_iter()))
+  Ok((num_samples, payload_len))
 }
 
 ///
@@ -251,10 +250,11 @@ fn decode_ricecode_block(
     }
   } else if ftype == 2 || ftype == 3 {
     let nb = if ftype == 2 { 2 } else { 4 };
+    let level = 1 << code.nsubs;
     for wav_value in wav.iter_mut().take(block_len) {
       let n = br.read_zero_bits()? as i16;
       let r = br.read_nbits(nb)? as i16;
-      let i = r + (1 << code.nsubs) * (n - 1);
+      let i = r + level * (n - 1);
       if i as usize >= code.inv_len {
         return Err(X3Error::OutOfBoundsInverse);
       }

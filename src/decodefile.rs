@@ -83,12 +83,14 @@ fn read_archive_header(br: &mut BitReader) -> Result<(u32, x3::Parameters), X3Er
   br.inc_counter_n_bytes(x3::Archive::ID.len())?;
 
   // <XML MetaData>
-  let (_, payload_iter) = decoder::get_frame_payload(br)?;
+  let (_, payload_size) = decoder::get_frame_details(br)?;
 
-  // We need to increment br by the payload to get the next frame
-  br.inc_counter_n_bytes(payload_iter.len())?;
+  let mut payload: Vec<u8> = vec![0; payload_size];
 
-  let payload: Vec<u8> = payload_iter.collect();
+  // Get the payload
+  br.peek_bytes(&mut payload)?;
+  br.inc_counter_n_bytes(payload_size)?;
+
   let xml = String::from_utf8_lossy(&payload);
 
   let (sample_rate, params) = parse_xml(&xml)?;
@@ -162,7 +164,12 @@ fn parse_xml(xml: &str) -> Result<(u32, x3::Parameters), X3Error> {
     rc_array[i] = rice_code_ids[i];
     th_array[i] = thresholds[i];
   }
-  let params = x3::Parameters::new(block_len as usize, 500, rc_array, th_array)?;
+  let params = x3::Parameters::new(
+    block_len as usize,
+    x3::Parameters::DEFAULT_BLOCKS_PER_FRAME,
+    rc_array,
+    th_array,
+  )?;
 
   Ok((sample_rate, params))
 }

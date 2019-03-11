@@ -55,7 +55,13 @@ pub struct Parameters {
 impl Parameters {
   pub const MAX_BLOCK_LENGTH: usize = 60;
   pub const WAV_BIT_SIZE: usize = 16;
+
+  #[cfg(not(feature = "oceaninstruments"))]
   pub const DEFAULT_BLOCK_LENGTH: usize = 20;
+
+  #[cfg(feature = "oceaninstruments")]
+  pub const DEFAULT_BLOCK_LENGTH: usize = 16;
+
   pub const DEFAULT_RICE_CODES: [usize; 3] = [0, 1, 3];
   pub const DEFAULT_THRESHOLDS: [usize; 3] = [3, 8, 20];
   pub const DEFAULT_BLOCKS_PER_FRAME: usize = 500;
@@ -109,6 +115,7 @@ impl Frame {
 }
 
 pub struct FrameHeader {}
+#[cfg(not(feature = "oceaninstruments"))]
 impl FrameHeader {
   /// The length of the header
   pub const LENGTH: usize = 20;
@@ -117,8 +124,39 @@ impl FrameHeader {
   pub const KEY: u16 = 30771; // "x3"
   pub const KEY_BUF: &'static [u8] = &[0x78, 0x33]; // "x3"
 
+  /// The location of various bytes in the payload
+  pub const SAMPLE_RATE_BYTE: usize = 0;
+
   /// CRC of the encoded payload, all the frames
   pub const HEADER_CRC_BYTE: usize = 16;
+}
+
+// Uses the following setup for the FrameHeader:
+//   Preamble for synchronisation (2 bytes) - "ST"
+//   Packet Type (2 bytes) - ignored
+//   Packet size (2 bytes) - Big Endian
+//   *Number of samples (2 bytes) - Big Endian
+//   Acquisition Date/Time Stamp (unix time) (4 bytes) - Big Endian
+//   Acquisition Date/Time Stamp (microseconds) (4 bytes) - Big Endian
+//   Unused (2 bytes) - ignored
+//   *SampleRate(2 bytes) - Big Endian
+//   Unused (4 bytes) - ignored
+//   Audio Data (up to 2048 bytes)
+
+#[cfg(feature = "oceaninstruments")]
+impl FrameHeader {
+  /// The length of the header
+  pub const LENGTH: usize = 24;
+
+  /// Fixed key marks the boundary of the frame 'ST'
+  pub const KEY: u16 = 21332; // "ST"
+  pub const KEY_BUF: &'static [u8] = &[0x53, 0x54]; // "ST"
+
+  /// The location of various bytes in the payload
+  pub const SAMPLE_RATE_BYTE: usize = 18;
+
+  /// CRC of the encoded payload, all the frames
+  pub const HEADER_CRC_BYTE: usize = 20;
 }
 
 #[allow(dead_code)]

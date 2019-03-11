@@ -246,7 +246,22 @@ pub struct BitReader<'a> {
 }
 
 impl<'a> BitReader<'a> {
-  pub fn new(array: &'a [u8]) -> BitReader {
+  pub fn new(array: &'a mut [u8]) -> BitReader {
+    // OceanInstruments reads the byte stream as big-endian
+    #[cfg(feature = "oceaninstruments")]
+    {
+      for i in (26..array.len()).step_by(2) {
+        let j = i + 1;
+        if j >= array.len() {
+          break;
+        }
+        let a = array[i];
+        let b = array[j];
+        array[i] = b;
+        array[j] = a;
+      }
+    }
+
     BitReader {
       array,
       p_byte: 0,
@@ -479,7 +494,7 @@ mod tests {
 
   #[test]
   fn test_read_zero_bits() {
-    let inp_arr: &[u8] = &[0x00, 0x0f, 0xf0];
+    let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0xf0];
     let mut br = BitReader::new(inp_arr);
 
     let zeros = br.read_zero_bits().unwrap();
@@ -503,7 +518,7 @@ mod tests {
 
   #[test]
   fn test_read_packed_bits() {
-    let inp_arr: &[u8] = &[0x00, 0x0f, 0x00];
+    let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0x00];
     let mut br = BitReader::new(inp_arr);
     br.p_byte = 1;
     br.p_bit = 4;
@@ -512,7 +527,7 @@ mod tests {
     assert_eq!(0, br.p_bit);
     assert_eq!(0x0f, value);
 
-    let inp_arr: &[u8] = &[0x00, 0xf9, 0x00];
+    let inp_arr: &mut [u8] = &mut [0x00, 0xf9, 0x00];
     let mut br = BitReader::new(inp_arr);
     br.p_byte = 1;
     br.p_bit = 1;
@@ -521,7 +536,7 @@ mod tests {
     assert_eq!(7, br.p_bit);
     assert_eq!(0x3c, value);
 
-    let inp_arr: &[u8] = &[0x00, 0x0f, 0xf0];
+    let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0xf0];
     let mut br = BitReader::new(inp_arr);
     br.p_byte = 1;
     br.p_bit = 4;
@@ -530,7 +545,7 @@ mod tests {
     assert_eq!(4, br.p_bit);
     assert_eq!(0xff, value);
 
-    let inp_arr: &[u8] = &[0x00, 0x0f, 0xfa];
+    let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0xfa];
     let mut br = BitReader::new(inp_arr);
     br.p_byte = 1;
     br.p_bit = 4;
@@ -539,7 +554,7 @@ mod tests {
     assert_eq!(0, br.p_bit);
     assert_eq!(0xffa, value);
 
-    let inp_arr: &[u8] = &[0x00, 0x6a, 0xca];
+    let inp_arr: &mut [u8] = &mut [0x00, 0x6a, 0xca];
     let mut br = BitReader::new(inp_arr);
     br.p_byte = 1;
     br.p_bit = 6;

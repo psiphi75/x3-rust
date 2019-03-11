@@ -26,8 +26,9 @@ use clap::{App, Arg};
 
 #[derive(PartialEq, Eq)]
 enum AudioFiles {
-  X3a,
-  Wav,
+  X3a,   // .x3a
+  Wav,   // .wav
+  X3Bin, // .bin
 }
 
 fn get_filetype(filename: &str) -> AudioFiles {
@@ -37,7 +38,13 @@ fn get_filetype(filename: &str) -> AudioFiles {
   if filename.ends_with(".wav") {
     return AudioFiles::Wav;
   }
-  panic!("Invalid audio file, expecting a '.wav' or '.x3a' file: {}", filename);
+  if filename.ends_with(".bin") {
+    return AudioFiles::X3Bin;
+  }
+  panic!(
+    "Invalid audio file, expecting a '.wav', '.bin' or '.x3a' file: {}",
+    filename
+  );
 }
 
 fn main() {
@@ -75,9 +82,12 @@ fn main() {
     panic!("Input must be different file type than output.");
   }
 
-  if in_type == AudioFiles::Wav {
-    x3::encodefile::wav_to_x3a(in_file, out_file).unwrap();
-  } else {
-    x3::decodefile::x3a_to_wav(in_file, out_file).unwrap();
-  }
+  match in_type {
+    AudioFiles::Wav => x3::encodefile::wav_to_x3a(in_file, out_file).unwrap(),
+    AudioFiles::X3a => x3::decodefile::x3a_to_wav(in_file, out_file).unwrap(),
+    AudioFiles::X3Bin => {
+      assert!(out_type == AudioFiles::Wav);
+      x3::decodefile::x3bin_to_wav(in_file, out_file).unwrap();
+    }
+  };
 }

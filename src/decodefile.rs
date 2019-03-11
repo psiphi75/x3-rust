@@ -25,6 +25,8 @@ use std::io::prelude::*;
 use std::path;
 
 // externs
+#[cfg(feature = "oceaninstruments")]
+use crate::byteorder::{BigEndian, ByteOrder};
 use crate::hound;
 
 // this crate
@@ -73,7 +75,60 @@ pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Res
 }
 
 ///
-/// Read <Archive Header> to the ByteReader output.
+/// Convert an .bin (x3 binary without archive details) file to a .wav file.  
+///
+/// ### Arguments
+///
+/// * `x3bin_filename` - the input x3 bin (.bin) file to decode.
+/// * `wav_filename` - the output wav file to write to.  It will be overwritten.
+///
+pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) -> Result<(), X3Error> {
+  let mut file = File::open(x3bin_filename).unwrap();
+
+  let mut buf = Vec::new();
+  file.read_to_end(&mut buf).unwrap();
+  let br = &mut BitReader::new(&mut buf);
+
+  let (sample_rate, params) = peek_header(br)?;
+
+  println!("sample_rate: {}\nblock_len: {}", sample_rate, params.block_len);
+  let wav = decoder::decode_frames(br, &params)?;
+
+  let spec = hound::WavSpec {
+    channels: 1,
+    sample_rate: sample_rate as u32,
+    bits_per_sample: 16,
+    sample_format: hound::SampleFormat::Int,
+  };
+
+  let mut writer = hound::WavWriter::create(wav_filename, spec)?;
+  for w in wav {
+    writer.write_sample(w)?;
+  }
+
+  Ok(())
+}
+
+///
+/// Read the frame header to the BitReader output.
+///
+fn peek_header(br: &mut BitReader) -> Result<(u32, x3::Parameters), X3Error> {
+  let buf = &mut [0u8; x3::FrameHeader::HEADER_CRC_BYTE];
+  br.peek_bytes(buf)?;
+
+  #[cfg(not(feature = "oceaninstruments"))]
+  let sample_rate = 48000; // FIXME: Need to set this somehow else
+
+  #[cfg(feature = "oceaninstruments")]
+  let sample_rate = BigEndian::read_u16(&buf[x3::FrameHeader::SAMPLE_RATE_BYTE..]);
+
+  let params = x3::Parameters::default();
+
+  Ok((sample_rate as u32, params))
+}
+
+///
+/// Read <Archive Header> to the BitReader output.
 ///
 fn read_archive_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error> {
   // <Archive Id>

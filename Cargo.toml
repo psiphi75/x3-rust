@@ -11,6 +11,16 @@ keywords = ["audio", "compression"]
 categories = ["compression", "embedded", "encoding", "multimedia::audio"]
 
 
+[features]
+default = ["classic"]
+
+# The classic compression header sizes.  Has no dependencies.
+classic = []
+
+# Custom compression header sizes - ones used by OceanInstruments.
+oceaninstruments = []
+
+
 [build-dependencies]
 clippy = { version = "^0.0.302", optional = true }
 

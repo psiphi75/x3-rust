@@ -31,7 +31,7 @@ X3=../target/release/x3
 W2S=../target/release/wav_to_str
 
 SOUND_DIR=$1
-if [ ! -d ${SOUND_DIR} ]; then
+if [ -z ${SOUND_DIR} ] || [ ! -d ${SOUND_DIR} ]; then
   echo
   echo "Usage:"
   echo "  test_wavs.sh [DIRECTORY]"

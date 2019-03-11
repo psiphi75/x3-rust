@@ -28,7 +28,7 @@ use std::path;
 use crate::hound;
 
 // this crate
-use crate::bitpack::BitReader;
+use crate::bitpack::ByteReader;
 use crate::decoder;
 use crate::error;
 use crate::x3;
@@ -53,9 +53,9 @@ pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Res
 
   let mut buf = Vec::new();
   file.read_to_end(&mut buf).unwrap();
-  let br = &mut BitReader::new(&buf);
-  let (sample_rate, params) = read_archive_header(br).expect("Invalid X3 Archive header");
-  let wav = decoder::decode_frames(br, &params)?;
+  let bytes = &mut ByteReader::new(&buf);
+  let (sample_rate, params) = read_archive_header(bytes).expect("Invalid X3 Archive header");
+  let wav = decoder::decode_frames(bytes, &params)?;
 
   let spec = hound::WavSpec {
     channels: 1,
@@ -73,23 +73,21 @@ pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Res
 }
 
 ///
-/// Read <Archive Header> to the BitReader output.
+/// Read <Archive Header> to the ByteReader output.
 ///
-fn read_archive_header(br: &mut BitReader) -> Result<(u32, x3::Parameters), X3Error> {
+fn read_archive_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error> {
   // <Archive Id>
-  if !br.eq(x3::Archive::ID)? {
+  if !bytes.eq(x3::Archive::ID)? {
     return Err(X3Error::ArchiveHeaderXMLInvalidKey);
   }
-  br.inc_counter_n_bytes(x3::Archive::ID.len())?;
+  bytes.inc_counter(x3::Archive::ID.len())?;
 
   // <XML MetaData>
-  let (_, payload_size) = decoder::get_frame_details(br)?;
-
-  let mut payload: Vec<u8> = vec![0; payload_size];
+  let (_, payload_size) = decoder::read_frame_header(bytes)?;
 
   // Get the payload
-  br.peek_bytes(&mut payload)?;
-  br.inc_counter_n_bytes(payload_size)?;
+  let mut payload: Vec<u8> = vec![0; payload_size];
+  bytes.read(&mut payload)?;
 
   let xml = String::from_utf8_lossy(&payload);
 

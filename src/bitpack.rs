@@ -21,6 +21,7 @@
 
 // externs
 use crate::byteorder::{BigEndian, ByteOrder, LittleEndian};
+use crate::crc::crc16;
 
 #[derive(Debug)]
 pub enum BitPackError {
@@ -242,12 +243,6 @@ pub struct BitReader<'a> {
   // Bit pointer
   p_byte: usize,
   p_bit: usize,
-
-  // Temporary boundary
-  p_boundary: usize,
-
-  // Bookmark
-  bm_p_byte: usize,
 }
 
 impl<'a> BitReader<'a> {
@@ -256,62 +251,6 @@ impl<'a> BitReader<'a> {
       array,
       p_byte: 0,
       p_bit: 0,
-      p_boundary: array.len(),
-      bm_p_byte: 0,
-    }
-  }
-
-  ///
-  /// Save the current position as a bookmark.  Later we will be
-  /// able to write an array of bytes to this position.
-  ///
-  pub fn bookmark(&mut self) {
-    self.bm_p_byte = self.p_byte;
-  }
-
-  ///
-  /// Search for `target` starting from the bookmark, limited by `limit` number
-  /// of bytes.
-  ///
-  /// ### Arguments
-  ///   
-  ///  * `target` - The target value.
-  ///  * `limit` - The maximumg number of bytes to search.
-  ///
-  pub fn find_u16_from_bookmark(&mut self, target: u16, limit: usize) -> Result<(), BitPackError> {
-    let bh = (target >> 8) as u8;
-    let bl = (target & 0xff) as u8;
-    let mut found_bh = false;
-
-    for (i, a) in (&self.array[self.p_byte..]).iter().enumerate() {
-      // Check limit and bail if we hit it
-      if i == limit {
-        self.p_byte += limit;
-        return Err(BitPackError::SearchItemNotFound);
-      }
-
-      // Do the search
-      if found_bh && bl == *a {
-        return Ok(());
-      }
-      found_bh = *a == bh;
-    }
-
-    self.p_byte = self.array.len();
-    Err(BitPackError::ArrayEndReached)
-  }
-
-  ///
-  /// Get the number of bytes remaining in the BitReader buffer.
-  ///
-  pub fn remaining_bytes(&self) -> Result<usize, BitPackError> {
-    if self.p_byte > self.array.len() {
-      return Err(BitPackError::ArrayEndReached);
-    }
-    if self.p_bit > 0 {
-      Ok(self.array.len() - self.p_byte - 1)
-    } else {
-      Ok(self.array.len() - self.p_byte)
     }
   }
 
@@ -328,17 +267,13 @@ impl<'a> BitReader<'a> {
   /// * The unsigned value returned.
   ///
   #[inline(always)]
-  pub fn read_nbits(&mut self, mut num_bits: usize) -> Result<u16, BitPackError> {
+  pub fn read_nbits(&mut self, num_bits: usize) -> Result<u16, BitPackError> {
     let rem_bit = 8 - self.p_bit;
     let mask = ((1 << num_bits) - 1) as u16;
     let value: u16;
 
-    let bits_to_boundary = self.bits_to_boundary()?;
-    if bits_to_boundary == 0 {
+    if self.p_byte >= self.array.len() {
       return Err(BitPackError::BoundaryReached);
-    }
-    if num_bits > bits_to_boundary {
-      num_bits = bits_to_boundary;
     }
 
     if num_bits == rem_bit {
@@ -374,109 +309,43 @@ impl<'a> BitReader<'a> {
     let mut zeros = 0;
 
     while self.p_byte < self.array.len() && self.array[self.p_byte] & (1 << (7 - self.p_bit)) == 0x00 {
-      self.inc_counter()?;
+      self.p_bit += 1;
+      if self.p_bit == 8 {
+        self.p_bit = 0;
+        self.p_byte += 1;
+      }
       zeros += 1;
     }
 
     Ok(zeros)
   }
+}
 
-  ///
-  /// Read the next two bytes as big-endian u16.
-  ///
-  pub fn read_be_u16(&mut self) -> Result<u16, BitPackError> {
-    if self.p_bit != 0 {
-      return Err(BitPackError::NotByteAligned);
-    }
+//
+// ######                       ######
+// #     # #     # ##### ###### #     # ######   ##   #####  ###### #####
+// #     #  #   #    #   #      #     # #       #  #  #    # #      #    #
+// ######    # #     #   #####  ######  #####  #    # #    # #####  #    #
+// #     #    #      #   #      #   #   #      ###### #    # #      #####
+// #     #    #      #   #      #    #  #      #    # #    # #      #   #
+// ######     #      #   ###### #     # ###### #    # #####  ###### #    #
+//
 
-    let value = BigEndian::read_u16(&self.array[self.p_byte..]);
-    self.p_byte += 2;
-    Ok(value)
+///
+/// BitReader allows individual bits to be read from an array of bytes.
+///
+pub struct ByteReader<'a> {
+  array: &'a [u8],
+  p_byte: usize, // Byte pointer
+}
+
+impl<'a> ByteReader<'a> {
+  pub fn new(array: &'a [u8]) -> ByteReader {
+    ByteReader { array, p_byte: 0 }
   }
 
   ///
-  /// Read the next two bytes as big-endian i16.
-  ///
-  pub fn read_be_i16(&mut self) -> Result<i16, BitPackError> {
-    if self.p_bit != 0 {
-      return Err(BitPackError::NotByteAligned);
-    }
-    let value = BigEndian::read_i16(&self.array[self.p_byte..]);
-    self.p_byte += 2;
-    Ok(value)
-  }
-
-  ///
-  /// Read the next two bytes as little-endian i16.
-  ///
-  pub fn read_le_i16(&mut self) -> Result<i16, BitPackError> {
-    if self.p_bit != 0 {
-      return Err(BitPackError::NotByteAligned);
-    }
-    let value = LittleEndian::read_i16(&self.array[self.p_byte..]);
-    self.p_byte += 2;
-    Ok(value)
-  }
-
-  ///
-  /// This operates together with `write_packed_bits`.  It only increments the
-  /// `p_bit` value by 1, also incrementing `p_byte` where necessary.
-  ///
-  #[inline(always)]
-  pub fn inc_counter(&mut self) -> Result<(), BitPackError> {
-    self.p_bit += 1;
-    if self.p_bit == 8 {
-      self.p_bit = 0;
-      self.p_byte += 1;
-    }
-    Ok(())
-  }
-
-  ///
-  /// This operates together with `write_packed_bits`.  It increments the
-  /// `p_byte` value by `n_bytes`.
-  ///
-  pub fn inc_counter_n_bytes(&mut self, n_bytes: usize) -> Result<(), BitPackError> {
-    if self.p_bit != 0 {
-      return Err(BitPackError::NotByteAligned);
-    }
-    self.p_byte += n_bytes;
-
-    Ok(())
-  }
-
-  ///
-  /// This operates together with `write_packed_bits`.  It decrements the
-  /// `p_byte` value by `n_bytes`.
-  ///
-  pub fn dec_counter_n_bytes(&mut self, n_bytes: usize) -> Result<(), BitPackError> {
-    if self.p_bit != 0 {
-      return Err(BitPackError::NotByteAligned);
-    }
-    self.p_byte -= n_bytes;
-
-    Ok(())
-  }
-
-  ///
-  /// Peek at the next `buf.len()` bytes.  This will not modify the bit pointer.
-  ///
-  /// ### Arguments
-  /// * `buf` - The array where the bytes will be written to.
-  ///
-  pub fn peek_bytes(&self, buf: &mut [u8]) -> Result<(), BitPackError> {
-    if self.p_bit != 0 {
-      return Err(BitPackError::NotByteAligned);
-    }
-    for (i, p_buf) in buf.iter_mut().enumerate() {
-      *p_buf = self.array[self.p_byte + i];
-    }
-
-    Ok(())
-  }
-
-  ///
-  /// Check if `buf` and BitReader array at the current read position contain the
+  /// Check if `buf` and ByteReader array at the current read position contain the
   /// same information.
   ///
   /// Note:
@@ -484,10 +353,8 @@ impl<'a> BitReader<'a> {
   /// ### Arguments
   /// * `buf` - The array where the bytes will be written to.
   ///
+  #[inline(always)]
   pub fn eq(&self, buf: &[u8]) -> Result<(bool), BitPackError> {
-    if self.p_bit != 0 {
-      return Err(BitPackError::NotByteAligned);
-    }
     let mut eq = true;
     let mut p = self.p_byte;
     for b in buf {
@@ -501,40 +368,96 @@ impl<'a> BitReader<'a> {
   }
 
   ///
-  /// Align the packing to the next word, but only if we aren't already aligned.
+  /// Get the number of bytes remaining in the ByteReader buffer.
   ///
-  pub fn word_align(&mut self) {
-    if self.p_bit != 0 {
-      self.p_byte += 1;
-      self.p_bit = 0;
-    }
-    if self.p_byte % 2 == 1 {
-      self.p_byte += 1;
+  #[inline(always)]
+  pub fn remaining_bytes(&self) -> Result<usize, BitPackError> {
+    if self.p_byte > self.array.len() {
+      Err(BitPackError::ArrayEndReached)
+    } else {
+      Ok(self.array.len() - self.p_byte)
     }
   }
 
   ///
-  /// Set a boundary where to stop reading bits.  For example,
-  /// if you are reading bits, but want to stop at a certain
-  /// point (a whole byte), then setting the boundary is will
-  /// make this happen.
+  /// This operates together with `write_packed_bits`.  It increments the
+  /// `p_byte` value by `n_bytes`.
   ///
-  pub fn set_boundary(&mut self, boundary: usize) -> Result<(), BitPackError> {
-    self.p_boundary = self.p_byte + boundary;
+  #[inline(always)]
+  pub fn inc_counter(&mut self, n_bytes: usize) -> Result<(), BitPackError> {
+    self.p_byte += n_bytes;
+
     Ok(())
   }
 
+  ///
+  /// This operates together with `write_packed_bits`.  It decrements the
+  /// `p_byte` value by `n_bytes`.
+  ///
   #[inline(always)]
-  pub fn bits_to_boundary(&self) -> Result<usize, BitPackError> {
-    let v = self.p_boundary as isize - self.p_byte as isize - 1;
-    if v < 0 {
-      return Err(BitPackError::BoundaryReached);
-    }
-    Ok(v as usize * 8 + (8 - self.p_bit))
+  pub fn dec_counter(&mut self, n_bytes: usize) -> Result<(), BitPackError> {
+    self.p_byte -= n_bytes;
+
+    Ok(())
   }
 
-  pub fn reset_boundary(&mut self) {
-    self.p_boundary = self.array.len();
+  ///
+  /// Read `buf.len()` bytes and write them to buf.
+  ///
+  /// ### Arguments
+  /// * `buf` - The array where the bytes will be written to.
+  ///
+  pub fn read(&mut self, buf: &mut [u8]) -> Result<(), BitPackError> {
+    for (i, p_buf) in buf.iter_mut().enumerate() {
+      *p_buf = self.array[self.p_byte + i];
+    }
+    self.p_byte += buf.len();
+
+    Ok(())
+  }
+
+  ///
+  /// Read the next two bytes as big-endian u16.
+  ///
+  #[inline(always)]
+  pub fn read_u8(&mut self) -> Result<u8, BitPackError> {
+    let value = self.array[self.p_byte];
+    self.p_byte += 1;
+    Ok(value)
+  }
+
+  ///
+  /// Read the next two bytes as big-endian u16.
+  ///
+  #[inline(always)]
+  pub fn read_be_u16(&mut self) -> Result<u16, BitPackError> {
+    let value = BigEndian::read_u16(&self.array[self.p_byte..]);
+    self.p_byte += 2;
+    Ok(value)
+  }
+
+  ///
+  /// Read the next two bytes as big-endian i16.
+  ///
+  #[inline(always)]
+  pub fn read_be_i16(&mut self) -> Result<i16, BitPackError> {
+    let value = BigEndian::read_i16(&self.array[self.p_byte..]);
+    self.p_byte += 2;
+    Ok(value)
+  }
+
+  ///
+  /// Read the next two bytes as little-endian i16.
+  ///
+  #[inline(always)]
+  pub fn read_le_i16(&mut self) -> Result<i16, BitPackError> {
+    let value = LittleEndian::read_i16(&self.array[self.p_byte..]);
+    self.p_byte += 2;
+    Ok(value)
+  }
+
+  pub fn crc16(&self, num_bytes: usize) -> Result<u16, BitPackError> {
+    Ok(crc16(&self.array[self.p_byte..(self.p_byte + num_bytes)]))
   }
 }
 
@@ -569,9 +492,9 @@ mod tests {
     assert_eq!(4, br.p_bit);
     assert_eq!(0, zeros);
 
-    for _ in 0..8 {
-      br.inc_counter().unwrap();
-    }
+    // Skip some bits
+    br.read_nbits(8).unwrap();
+
     let zeros = br.read_zero_bits().unwrap();
     assert_eq!(3, br.p_byte);
     assert_eq!(0, br.p_bit);

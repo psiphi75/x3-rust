@@ -87,12 +87,12 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
 
   let mut buf = Vec::new();
   file.read_to_end(&mut buf).unwrap();
-  let br = &mut BitReader::new(&mut buf);
+  let bytes = &mut ByteReader::new(&mut buf);
 
-  let (sample_rate, params) = peek_header(br)?;
+  let (sample_rate, params) = read_header(bytes)?;
 
   println!("sample_rate: {}\nblock_len: {}", sample_rate, params.block_len);
-  let wav = decoder::decode_frames(br, &params)?;
+  let wav = decoder::decode_frames(bytes, &params)?;
 
   let spec = hound::WavSpec {
     channels: 1,
@@ -110,11 +110,11 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
 }
 
 ///
-/// Read the frame header to the BitReader output.
+/// Read the frame header to the ByteReader output.
 ///
-fn peek_header(br: &mut BitReader) -> Result<(u32, x3::Parameters), X3Error> {
+fn read_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error> {
   let buf = &mut [0u8; x3::FrameHeader::HEADER_CRC_BYTE];
-  br.peek_bytes(buf)?;
+  bytes.read(buf)?;
 
   #[cfg(not(feature = "oceaninstruments"))]
   let sample_rate = 48000; // FIXME: Need to set this somehow else

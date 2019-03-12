@@ -370,16 +370,14 @@ impl<'a> ByteReader<'a> {
   ///
   #[inline(always)]
   pub fn eq(&self, buf: &[u8]) -> Result<(bool), BitPackError> {
-    let mut eq = true;
     let mut p = self.p_byte;
     for b in buf {
       if *b != self.array[p] {
-        eq = false;
-        break;
+        return Ok(false);
       };
       p += 1;
     }
-    Ok(eq)
+    Ok(true)
   }
 
   ///

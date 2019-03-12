@@ -111,16 +111,14 @@ pub fn decode_frame(
   let (ns, payload_size) = read_frame_header(bytes)?;
 
   #[cfg(not(feature = "oceaninstruments"))]
-  let mut last_wav = br.read_be_i16()?;
-  #[cfg(feature = "oceaninstruments")]
-  let mut last_wav = br.read_le_i16()?;
-
   let mut last_wav = bytes.read_be_i16()?;
+  #[cfg(feature = "oceaninstruments")]
+  let mut last_wav = bytes.read_le_i16()?;
 
   let br_payload_size = payload_size - 2;
   let mut buf = &mut vec![0; br_payload_size];
   bytes.read(&mut buf)?;
-  let br = &mut BitReader::new(&buf);
+  let br = &mut BitReader::new(&mut buf);
 
   let mut remaining_samples = ns - 1;
   let mut samples_written = 0;
@@ -215,59 +213,55 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
 //   Unused (4 bytes) - ignored
 //   Audio Data (up to 2048 bytes)
 #[cfg(feature = "oceaninstruments")]
-pub fn get_frame_details(br: &mut BitReader) -> Result<(usize, usize), X3Error> {
+pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Error> {
   // Calc header CRC
-  let buf = &mut [0u8; x3::FrameHeader::HEADER_CRC_BYTE];
-  br.peek_bytes(buf)?;
-  // let expected_header_crc = crc16(buf);
+  let _expected_header_crc = bytes.crc16(x3::FrameHeader::HEADER_CRC_BYTE)?;
 
   // Read <Frame Key>
-  if !br.eq(x3::FrameHeader::KEY_BUF)? {
+  if !bytes.eq(x3::FrameHeader::KEY_BUF)? {
     return Err(X3Error::FrameHeaderInvalidKey);
   }
-  br.inc_counter_n_bytes(x3::FrameHeader::KEY_BUF.len())?;
+  bytes.inc_counter(x3::FrameHeader::KEY_BUF.len())?;
 
   // <Source Id>
   // Currently just skip it
-  br.inc_counter_n_bytes(1)?;
+  bytes.inc_counter(1)?;
 
   // <Num Channels>
-  let num_channels = br.read_nbits(8)?;
+  let num_channels = bytes.read_u8()?;
   if num_channels > 1 {
     return Err(X3Error::MoreThanOneChannel);
   }
 
   // <Payload Length>
-  let payload_len = br.read_be_u16()? as usize;
+  let payload_len = bytes.read_be_u16()? as usize;
   if payload_len >= x3::Frame::MAX_LENGTH {
     return Err(X3Error::FrameLength);
   }
 
   // <Num Samples>
-  let num_samples = br.read_be_u16()? as usize;
+  let num_samples = bytes.read_be_u16()? as usize;
 
   // <Time>
   // Skip time
-  br.inc_counter_n_bytes(8)?;
+  bytes.inc_counter(8)?;
 
   // Unused
-  br.inc_counter_n_bytes(2)?;
+  bytes.inc_counter(2)?;
 
   // Ignore sample rate
-  let _sample_rate = br.inc_counter_n_bytes(2)?;
+  let _sample_rate = bytes.inc_counter(2)?;
 
   // TODO: This may be turned on the future
   // <Header CRC>
-  let _header_crc = br.read_be_u16()?;
+  let _header_crc = bytes.read_be_u16()?;
   // if expected_header_crc != header_crc {
   //   return Err(X3Error::FrameHeaderInvalidHeaderCRC);
   // }
 
   // <Payload CRC>
-  let _payload_crc = br.read_be_u16()?;
-  let mut payload = vec![0; payload_len];
-  br.peek_bytes(&mut payload)?;
-  // let expected_payload_crc = crc16(&payload);
+  let _payload_crc = bytes.read_be_u16()?;
+  let _expected_payload_crc = bytes.crc16(payload_len)?;
   // if expected_payload_crc != payload_crc {
   //   return Err(X3Error::FrameHeaderInvalidPayloadCRC);
   // }
@@ -295,16 +289,16 @@ pub fn decode_block(
   params: &x3::Parameters,
 ) -> Result<(), X3Error> {
   let ftype = br.read_nbits(2)? as usize;
-  if ftype != 0 {
-    decode_ricecode_block(br, wav, last_wav, block_len, params, ftype)?;
-  } else {
+  if ftype == 0 {
     decode_bpf_block(br, wav, last_wav, block_len)?;
+  } else {
+    decode_ricecode_block(br, wav, last_wav, block_len, params, ftype)?;
   }
 
   for w in wav {
     print!("{} ", w);
   }
-  println!();
+  print!("\n{}: ", br.p_byte);
 
   Ok(())
 }
@@ -346,6 +340,10 @@ fn decode_ricecode_block(
 fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16, block_len: usize) -> Result<(), X3Error> {
   // This is a BFP or pass-through block
   let num_bits = (br.read_nbits(4)? + 1) as usize; // Read the rest of the block header
+  if num_bits <= 5 {
+    // We can't have BPF with length 5 or less.
+    return Err(X3Error::FrameDecodeInvalidBPF);
+  }
   if num_bits == 16 {
     // This is a pass-through block
     for wav_value in wav.iter_mut().take(block_len) {

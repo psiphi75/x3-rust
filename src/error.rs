@@ -46,6 +46,8 @@ pub enum X3Error {
   FrameHeaderInvalidHeaderCRC,
   FrameHeaderInvalidPayloadCRC,
 
+  // Decoding issues
+  FrameDecodeInvalidBPF,    // The BPF decoder blew up, an invalid value was reached.
   FrameDecodeUnexpectedEnd, // The BitReader stream has less bytes than the size of the header, but still expects a frame.
 }
 

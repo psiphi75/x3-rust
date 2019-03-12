@@ -250,7 +250,7 @@ impl<'a> BitReader<'a> {
     // OceanInstruments reads the byte stream as big-endian
     #[cfg(feature = "oceaninstruments")]
     {
-      for i in (26..array.len()).step_by(2) {
+      for i in (0..array.len()).step_by(2) {
         let j = i + 1;
         if j >= array.len() {
           break;

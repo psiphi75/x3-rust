@@ -133,8 +133,7 @@ pub fn decode_frame(
 
   while remaining_samples > 0 {
     let block_len = core::cmp::min(remaining_samples, params.block_len);
-
-    decode_block(br, &mut wav[*p_wav..(*p_wav + block_len)], &mut last_wav, &params)?;
+    let block_len = decode_block(br, &mut wav[*p_wav..(*p_wav + block_len)], &mut last_wav, &params)?;
 
     *samples_written += block_len;
     remaining_samples -= block_len;
@@ -295,15 +294,13 @@ pub fn decode_block(
   wav: &mut [i16],
   last_wav: &mut i16,
   params: &x3::Parameters,
-) -> Result<(), X3Error> {
+) -> Result<usize, X3Error> {
   let ftype = br.read_nbits(2)? as usize;
   if ftype == 0 {
-    decode_bpf_block(br, wav, last_wav)?;
+    decode_bpf_block(br, wav, last_wav)
   } else {
-    decode_ricecode_block(br, wav, last_wav, params, ftype)?;
+    decode_ricecode_block(br, wav, last_wav, params, ftype)
   }
-
-  Ok(())
 }
 
 #[cfg(not(feature = "oceaninstruments"))]
@@ -313,7 +310,7 @@ fn decode_ricecode_block(
   last_wav: &mut i16,
   params: &x3::Parameters,
   ftype: usize,
-) -> Result<(), X3Error> {
+) -> Result<usize, X3Error> {
   let code = params.rice_codes[ftype - 1];
   if ftype == 1 {
     for wav_value in wav.iter_mut() {
@@ -337,7 +334,7 @@ fn decode_ricecode_block(
       *wav_value = *last_wav;
     }
   }
-  Ok(())
+  Ok(wav.len())
 }
 
 fn unsigned_to_i16(a: u16, num_bits: usize) -> i16 {
@@ -352,7 +349,7 @@ fn unsigned_to_i16(a: u16, num_bits: usize) -> i16 {
 }
 
 #[cfg(not(feature = "oceaninstruments"))]
-fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> Result<(), X3Error> {
+fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> Result<usize, X3Error> {
   // This is a BFP or pass-through block
   let num_bits = (br.read_nbits(4)? + 1) as usize; // Read the rest of the block header
 
@@ -377,15 +374,8 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> 
   }
   *last_wav = wav[wav.len() - 1];
 
-  Ok(())
+  Ok(wav.len())
 }
-
-// Int16 FixSign(UInt16 d, int nbits)
-// {
-// 	UInt32 half = (UInt32)(1<<(nbits-1));
-// 	UInt32 offs = (UInt32)(half<<1);
-// 	return (Int16)((d >= half) ? (Int32)d-offs : d);
-// }
 
 #[cfg(feature = "oceaninstruments")]
 const RSUFFS: [usize; 3] = [0, 1, 3];
@@ -458,24 +448,25 @@ fn unpack(br: &mut BitReader, wav: &mut [i16], nb: usize, count: usize) -> Resul
 }
 
 #[cfg(feature = "oceaninstruments")]
-// public int BlockDecode(BitStream2 bufIn, out Int16[] buf, Int16 last, int count) {
 pub fn decode_block(
   br: &mut BitReader,
   wav: &mut [i16],
   last_wav: &mut i16,
   _params: &x3::Parameters,
-) -> Result<(), X3Error> {
+) -> Result<usize, X3Error> {
   let mut nb = 0;
   let mut code = br.read_nbits(2)?;
   let mut count = wav.len();
   if code == 0 {
-    //bfp or pass thru block
-    nb = br.read_nbits(4)?; //E
+    // bfp or pass thru block
+    nb = br.read_nbits(4)?;
     if nb > 0 {
       nb += 1;
     } else {
       let nn = (br.read_nbits(6)? + 1) as usize;
-      // if (nn > blockLength) throw new Exception("bad block length");
+      if nn > wav.len() {
+        return Err(X3Error::FrameDecodeInvalidBlockLength);
+      }
       count = nn;
       code = br.read_nbits(2)?;
       if code == 0 {
@@ -488,13 +479,13 @@ pub fn decode_block(
   } else {
     unpack(br, wav, nb as usize, count)?;
     if nb == 16 {
-      return Ok(());
+      return Ok(count);
     }
   }
 
   integrate(wav, last_wav, wav.len());
 
-  Ok(())
+  Ok(count)
 }
 
 //

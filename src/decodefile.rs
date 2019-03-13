@@ -91,6 +91,12 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
 
   let (sample_rate, params) = read_header(bytes)?;
 
+  // For OceanInstruments, the file header is the first frame.
+  #[cfg(feature = "oceaninstruments")]
+  {
+    bytes.reset();
+  }
+
   println!("sample_rate: {}\nblock_len: {}", sample_rate, params.block_len);
   let wav = decoder::decode_frames(bytes, &params)?;
 

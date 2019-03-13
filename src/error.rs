@@ -42,13 +42,16 @@ pub enum X3Error {
   FrameLength, // The frame is too long
 
   // Frame header issues
-  FrameHeaderInvalidKey, // The frame header is missing 'x3'
+  FrameHeaderInvalidKey,        // The frame header is missing 'x3'
+  FrameHeaderInvalidPayloadLen, // The payload length reaches beyond the end of the available data
   FrameHeaderInvalidHeaderCRC,
   FrameHeaderInvalidPayloadCRC,
 
   // Decoding issues
-  FrameDecodeInvalidBPF,    // The BPF decoder blew up, an invalid value was reached.
-  FrameDecodeUnexpectedEnd, // The BitReader stream has less bytes than the size of the header, but still expects a frame.
+  FrameDecodeInvalidNTOGO,    // Invalid ntogo
+  FrameDecodeInvalidRiceCode, // The Rice codes are invalid
+  FrameDecodeInvalidBPF,      // The BPF decoder blew up, an invalid value was reached.
+  FrameDecodeUnexpectedEnd,   // The BitReader has less bytes than the size of the header, but still expects a frame.
 }
 
 impl From<std::io::Error> for X3Error {

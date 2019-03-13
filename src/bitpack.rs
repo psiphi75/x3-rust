@@ -334,6 +334,34 @@ impl<'a> BitReader<'a> {
 
     Ok(zeros)
   }
+
+  #[inline(always)]
+  pub fn read_int_larger_than(&mut self, lev: usize, out_val: &mut usize) -> Result<usize, BitPackError> {
+    let mut bits = 0;
+    let mut val = 0;
+    loop {
+      bits += 1;
+      if self.p_byte >= self.array.len() {
+        return Err(BitPackError::BoundaryReached);
+      }
+
+      if (self.array[self.p_byte] & (0x80 >> self.p_bit)) != 0 {
+        val += 1;
+      }
+
+      self.p_bit += 1;
+      if self.p_bit == 8 {
+        self.p_bit = 0;
+        self.p_byte += 1;
+      }
+
+      if val >= lev {
+        *out_val = val;
+        return Ok(bits);
+      }
+      val <<= 1;
+    }
+  }
 }
 
 //
@@ -357,6 +385,10 @@ pub struct ByteReader<'a> {
 impl<'a> ByteReader<'a> {
   pub fn new(array: &'a [u8]) -> ByteReader {
     ByteReader { array, p_byte: 0 }
+  }
+
+  pub fn reset(&mut self) {
+    self.p_byte = 0;
   }
 
   ///

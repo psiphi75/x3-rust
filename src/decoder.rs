@@ -72,14 +72,18 @@ pub fn decode_frames(bytes: &mut ByteReader, params: &x3::Parameters) -> Result<
   let mut p_wav = 0; // the pointer to keep a track of `wav` writes
   let mut total_samples_written = 0;
   while bytes.remaining_bytes()? > x3::FrameHeader::LENGTH {
-    match decode_frame(bytes, &mut wav, &params, &mut p_wav) {
-      Ok(result) => total_samples_written += result,
+    let mut samples_written = 0;
+    match decode_frame(bytes, &mut wav, &params, &mut p_wav, &mut samples_written) {
+      Ok(()) => {}
+      Err(X3Error::FrameHeaderInvalidPayloadLen) => eprintln!("The last frame was not complete"),
       Err(_) => match find_next_frame(bytes) {
         Ok(()) => (),
         Err(_) => eprintln!("An error occurred decoding a frame"), // this is okay, since we only hit the end of the array
       },
     };
+    total_samples_written += samples_written;
   }
+  println!("Samples written: {}", total_samples_written);
 
   // Resize to the length of uncompressed bytes
   wav.resize(total_samples_written, 0);
@@ -102,7 +106,8 @@ pub fn decode_frame(
   wav: &mut Vec<i16>,
   params: &x3::Parameters,
   p_wav: &mut usize,
-) -> Result<usize, X3Error> {
+  samples_written: &mut usize,
+) -> Result<(), X3Error> {
   if bytes.remaining_bytes()? < x3::FrameHeader::LENGTH {
     return Err(X3Error::FrameDecodeUnexpectedEnd);
   }
@@ -115,31 +120,28 @@ pub fn decode_frame(
   #[cfg(feature = "oceaninstruments")]
   let mut last_wav = bytes.read_le_i16()?;
 
+  wav[*p_wav] = last_wav;
+  *p_wav += 1;
+  *samples_written += 1;
+
   let br_payload_size = payload_size - 2;
   let mut buf = &mut vec![0; br_payload_size];
   bytes.read(&mut buf)?;
   let br = &mut BitReader::new(&mut buf);
 
   let mut remaining_samples = ns - 1;
-  let mut samples_written = 0;
 
   while remaining_samples > 0 {
     let block_len = core::cmp::min(remaining_samples, params.block_len);
 
-    decode_block(
-      br,
-      &mut wav[*p_wav..(*p_wav + params.block_len)],
-      &mut last_wav,
-      block_len,
-      &params,
-    )?;
+    decode_block(br, &mut wav[*p_wav..(*p_wav + block_len)], &mut last_wav, &params)?;
 
-    samples_written += block_len;
+    *samples_written += block_len;
     remaining_samples -= block_len;
     *p_wav += block_len;
   }
 
-  Ok(samples_written)
+  Ok(())
 }
 
 ///
@@ -193,6 +195,9 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
 
   // <Payload CRC>
   let payload_crc = bytes.read_be_u16()?;
+  if bytes.remaining_bytes()? < payload_len {
+    return Err(X3Error::FrameHeaderInvalidPayloadLen);
+  }
   let expected_payload_crc = bytes.crc16(payload_len)?;
   if expected_payload_crc != payload_crc {
     return Err(X3Error::FrameHeaderInvalidPayloadCRC);
@@ -261,6 +266,9 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
 
   // <Payload CRC>
   let _payload_crc = bytes.read_be_u16()?;
+  if bytes.remaining_bytes()? < payload_len {
+    return Err(X3Error::FrameHeaderInvalidPayloadLen);
+  }
   let _expected_payload_crc = bytes.crc16(payload_len)?;
   // if expected_payload_crc != payload_crc {
   //   return Err(X3Error::FrameHeaderInvalidPayloadCRC);
@@ -281,39 +289,34 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
 /// * `block_len` - how many bytes the decoded block will be.
 /// * `params` - the audio properties.
 ///
+#[cfg(not(feature = "oceaninstruments"))]
 pub fn decode_block(
   br: &mut BitReader,
   wav: &mut [i16],
   last_wav: &mut i16,
-  block_len: usize,
   params: &x3::Parameters,
 ) -> Result<(), X3Error> {
   let ftype = br.read_nbits(2)? as usize;
   if ftype == 0 {
-    decode_bpf_block(br, wav, last_wav, block_len)?;
+    decode_bpf_block(br, wav, last_wav)?;
   } else {
-    decode_ricecode_block(br, wav, last_wav, block_len, params, ftype)?;
+    decode_ricecode_block(br, wav, last_wav, params, ftype)?;
   }
-
-  for w in wav {
-    print!("{} ", w);
-  }
-  print!("\n{}: ", br.p_byte);
 
   Ok(())
 }
 
+#[cfg(not(feature = "oceaninstruments"))]
 fn decode_ricecode_block(
   br: &mut BitReader,
   wav: &mut [i16],
   last_wav: &mut i16,
-  block_len: usize,
   params: &x3::Parameters,
   ftype: usize,
 ) -> Result<(), X3Error> {
   let code = params.rice_codes[ftype - 1];
   if ftype == 1 {
-    for wav_value in wav.iter_mut().take(block_len) {
+    for wav_value in wav.iter_mut() {
       let n = br.read_zero_bits()?;
       br.read_nbits(1)?; // skip the next bit
       *last_wav += code.inv[n]; // Table lookup to convert to a signed number
@@ -322,7 +325,7 @@ fn decode_ricecode_block(
   } else if ftype == 2 || ftype == 3 {
     let nb = if ftype == 2 { 2 } else { 4 };
     let level = 1 << code.nsubs;
-    for wav_value in wav.iter_mut().take(block_len) {
+    for wav_value in wav.iter_mut() {
       let n = br.read_zero_bits()? as i16;
       let r = br.read_nbits(nb)? as i16;
       let i = r + level * (n - 1);
@@ -337,35 +340,159 @@ fn decode_ricecode_block(
   Ok(())
 }
 
-fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16, block_len: usize) -> Result<(), X3Error> {
+fn unsigned_to_i16(a: u16, num_bits: usize) -> i16 {
+  let mut a = i32::from(a);
+  let neg_thresh = 1 << (num_bits - 1);
+  let neg = 1 << num_bits;
+  // Need to convert this to a signed integer
+  if a > neg_thresh {
+    a -= neg;
+  }
+  a as i16
+}
+
+#[cfg(not(feature = "oceaninstruments"))]
+fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> Result<(), X3Error> {
   // This is a BFP or pass-through block
   let num_bits = (br.read_nbits(4)? + 1) as usize; // Read the rest of the block header
+
   if num_bits <= 5 {
     // We can't have BPF with length 5 or less.
     return Err(X3Error::FrameDecodeInvalidBPF);
   }
+
   if num_bits == 16 {
     // This is a pass-through block
-    for wav_value in wav.iter_mut().take(block_len) {
+    for wav_value in wav.iter_mut() {
       *wav_value = br.read_nbits(16)? as i16;
     }
   } else {
     // Otherwise, this is a BFP-encoded block with E + 1 bits/word
-    let neg_thresh = 1 << (num_bits - 1);
-    let neg = 1 << num_bits;
-    let mut value = i32::from(*last_wav);
-    for wav_value in wav.iter_mut().take(block_len) {
-      let mut diff = i32::from(br.read_nbits(num_bits)?);
-
-      // Need to convert this to a signed integer
-      if diff > neg_thresh {
-        diff -= neg;
-      }
-      value += diff;
+    let mut value = *last_wav;
+    for wav_value in wav.iter_mut() {
+      let diff = br.read_nbits(num_bits)?;
+      value += unsigned_to_i16(diff, num_bits);
       *wav_value = value as i16;
     }
   }
   *last_wav = wav[wav.len() - 1];
+
+  Ok(())
+}
+
+// Int16 FixSign(UInt16 d, int nbits)
+// {
+// 	UInt32 half = (UInt32)(1<<(nbits-1));
+// 	UInt32 offs = (UInt32)(half<<1);
+// 	return (Int16)((d >= half) ? (Int32)d-offs : d);
+// }
+
+#[cfg(feature = "oceaninstruments")]
+const RSUFFS: [usize; 3] = [0, 1, 3];
+#[cfg(feature = "oceaninstruments")]
+const IRT: &'static [i16; 53] = &[
+  0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6, -7, 7, -8, 8, -9, 9, -10, 10, -11, 11, -12, 12, -13, 13, -14, 14, -15,
+  15, -16, 16, -17, 17, -18, 18, -19, 19, -20, 20, -21, 21, -22, 22, -23, 23, -24, 24, -25, 25, -26, 26,
+];
+
+#[cfg(feature = "oceaninstruments")]
+fn unpackr(br: &mut BitReader, wav: &mut [i16], n: usize, code: usize) -> Result<(), X3Error> {
+  // unpacker for variable length Rice codes
+  // Returns 0 if ok, 1 if there are not enough bits in the stream.
+  let mut ow = 0;
+  let mut msk;
+  let mut ntogo = 0;
+  let mut ns;
+  let mut suff;
+  let nsuffix = RSUFFS[code];
+  let lev = 1 << nsuffix;
+
+  for k in 0..n {
+    // Do for n words
+    // First find the end of the variable length section.
+    // If there is an end and a complete suffix in the current word, it will
+    // have a value of at least 1<<nsuffix. If not, append the next word from
+    // the stream
+
+    ntogo = br.read_int_larger_than(lev, &mut ow)?;
+
+    // ow is now guaranteed to have a start and a suffix.
+    // Find the start (i.e., the first 1 bit from the left)
+    ns = 1;
+    msk = 1 << (ntogo - 1);
+    while ns <= ntogo && (ow & msk) == 0 {
+      ns += 1;
+      msk >>= 1;
+    }
+    if ns > ntogo {
+      return Err(X3Error::FrameDecodeInvalidRiceCode); //error
+    }
+    ntogo -= ns + nsuffix;
+    suff = (ow >> ntogo) & (lev - 1);
+    ow &= (1 << ntogo) - 1;
+    wav[k] = IRT[lev * (ns - 1) + suff];
+  }
+  if ntogo > 0 {
+    return Err(X3Error::FrameDecodeInvalidNTOGO); //error
+  }
+
+  Ok(())
+}
+
+#[cfg(feature = "oceaninstruments")]
+fn integrate(wav: &mut [i16], last_wav: &mut i16, count: usize) {
+  // De-emphasis filter to reverse the diff in the compressor.
+  // Filter operates in-place.
+  for k in 0..count {
+    *last_wav += wav[k];
+    wav[k] = *last_wav;
+  }
+}
+
+#[cfg(feature = "oceaninstruments")]
+fn unpack(br: &mut BitReader, wav: &mut [i16], nb: usize, count: usize) -> Result<(), X3Error> {
+  for i in 0..count {
+    wav[i] = unsigned_to_i16(br.read_nbits(nb)?, nb);
+  }
+  Ok(())
+}
+
+#[cfg(feature = "oceaninstruments")]
+// public int BlockDecode(BitStream2 bufIn, out Int16[] buf, Int16 last, int count) {
+pub fn decode_block(
+  br: &mut BitReader,
+  wav: &mut [i16],
+  last_wav: &mut i16,
+  _params: &x3::Parameters,
+) -> Result<(), X3Error> {
+  let mut nb = 0;
+  let mut code = br.read_nbits(2)?;
+  let mut count = wav.len();
+  if code == 0 {
+    //bfp or pass thru block
+    nb = br.read_nbits(4)?; //E
+    if nb > 0 {
+      nb += 1;
+    } else {
+      let nn = (br.read_nbits(6)? + 1) as usize;
+      // if (nn > blockLength) throw new Exception("bad block length");
+      count = nn;
+      code = br.read_nbits(2)?;
+      if code == 0 {
+        nb = br.read_nbits(4)? + 1;
+      }
+    }
+  }
+  if code > 0 {
+    unpackr(br, wav, count as usize, (code - 1) as usize)?;
+  } else {
+    unpack(br, wav, nb as usize, count)?;
+    if nb == 16 {
+      return Ok(());
+    }
+  }
+
+  integrate(wav, last_wav, wav.len());
 
   Ok(())
 }
@@ -406,7 +533,7 @@ mod tests {
     // Skip 6 bits
     br.read_nbits(6).unwrap();
 
-    decode_block(&mut br, wav, &mut last_wav, 19, params).unwrap();
+    decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
     assert_eq!(expected_wavput, &mut wav[0..expected_wavput.len()]);
   }
@@ -429,7 +556,7 @@ mod tests {
     let mut last_wav = BigEndian::read_i16(&x3_inp[0..2]);
     let mut br = BitReader::new(&mut x3_inp[2..]);
     let params = &x3::Parameters::default();
-    decode_block(&mut br, wav, &mut last_wav, 19, params).unwrap();
+    decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
     assert_eq!(expected_wavput, &mut wav[0..expected_wavput.len()]);
   }
@@ -446,7 +573,7 @@ mod tests {
     let mut last_wav = BigEndian::read_i16(&x3_inp[0..2]);
     let mut br = BitReader::new(&mut x3_inp[2..]);
     let params = &x3::Parameters::default();
-    decode_block(&mut br, wav, &mut last_wav, 19, params).unwrap();
+    decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
     assert_eq!(expected_wavput, &mut wav[0..expected_wavput.len()]);
   }
@@ -457,7 +584,7 @@ mod tests {
       129, 171, 62, 250, 4, 71, 75, 230, 252, 150, 153, 97, 24, 220, 83, 53, 143, 92, 101, 211, 155, 34, 73, 241, 221,
       200, 202, 252, 149, 240, 72, 20, 156, 172, 146, 59, 245, 23, 131, 33, 100, 0,
     ];
-    let wav: &mut [i16] = &mut [0i16; 20];
+    let wav: &mut [i16] = &mut [0i16; 19];
     let expected_wavput = [
       -16767, 4562, -1601, 9638, 22598, 14100, -12957, -10471, 29926, -14190, 31863, 29234, -16603, 31762, 1319, 11044,
       -28931, 17888, -14247,
@@ -466,7 +593,7 @@ mod tests {
     let mut last_wav = BigEndian::read_i16(&x3_inp[0..2]);
     let mut br = BitReader::new(&mut x3_inp[2..]);
     let params = &x3::Parameters::default();
-    decode_block(&mut br, wav, &mut last_wav, 19, params).unwrap();
+    decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
     assert_eq!(expected_wavput, &mut wav[0..expected_wavput.len()]);
   }
@@ -476,7 +603,7 @@ mod tests {
     let x3_inp: &mut [u8] = &mut [
       242, 73, 24, 151, 240, 252, 191, 163, 225, 164, 48, 158, 196, 188, 251, 246, 20, 31, 240, 96,
     ];
-    let wav: &mut [i16] = &mut [0i16; 20];
+    let wav: &mut [i16] = &mut [0i16; 19];
     let expected_wavput = [
       -3493, -3494, -3487, -3501, -3502, -3467, -3483, -3506, -3500, -3491, -3501, -3483, -3490, -3495, -3500, -3495,
       -3492, -3493, -3490,
@@ -485,7 +612,7 @@ mod tests {
     let mut last_wav = BigEndian::read_i16(&x3_inp[0..2]);
     let mut br = BitReader::new(&mut x3_inp[2..]);
     let params = &x3::Parameters::default();
-    decode_block(&mut br, wav, &mut last_wav, 19, params).unwrap();
+    decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
     assert_eq!(expected_wavput, &mut wav[0..expected_wavput.len()]);
   }

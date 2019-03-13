@@ -26,9 +26,9 @@
 # decompress them, and test the original with the decompressed version.
 # This validates end-to-end compression/decompression.
 #
-
-X3=../target/release/x3
-W2S=../target/release/wav_to_str
+TARGET=release
+X3=../target/${TARGET}/x3
+W2S=../target/${TARGET}/wav_to_str
 
 SOUND_DIR=$1
 if [ -z ${SOUND_DIR} ] || [ ! -d ${SOUND_DIR} ]; then
@@ -40,7 +40,7 @@ if [ -z ${SOUND_DIR} ] || [ ! -d ${SOUND_DIR} ]; then
 fi
 
 # build it
-cargo build --release
+cargo build --${TARGET}
 
 TEMP_X3A=$(mktemp).x3a
 trap "rm -f $TEMP_X3A" 0 2 3 15
@@ -51,7 +51,7 @@ trap "rm -f $TEMP_WAV" 0 2 3 15
 TEMP_WAV_STR_ORIG=${TEMP_WAV}.raw-orig
 trap "rm -f $TEMP_WAV_STR_ORIG" 0 2 3 15
 
-TEMP_WAV_STR_TEST=${TEMP_WAV}.raw-orig
+TEMP_WAV_STR_TEST=${TEMP_WAV}.raw-test
 trap "rm -f $TEMP_WAV_STR_TEST" 0 2 3 15
 
 
@@ -70,7 +70,7 @@ do
   echo "  Checking"
   $W2S --wav $WAV > "${TEMP_WAV_STR_ORIG}"
   $W2S --wav $TEMP_WAV > "${TEMP_WAV_STR_TEST}"
-  WAV_DIFF=$(diff "${TEMP_WAV_STR_ORIG}" "${TEMP_WAV_STR_TEST}")
+  WAV_DIFF=$(cmp "${TEMP_WAV_STR_ORIG}" "${TEMP_WAV_STR_TEST}")
   if [ -n "${WAV_DIFF}" ]; then
     echo "  TEST FAILED"
     echo ${WAV_DIFF}

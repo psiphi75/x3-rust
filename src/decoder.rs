@@ -237,8 +237,8 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
     return Err(X3Error::MoreThanOneChannel);
   }
 
-  // <Payload Length>
-  let payload_len = bytes.read_be_u16()? as usize;
+  // <Payload Length> - length in bytes, it's stored as length in words
+  let payload_len = (bytes.read_be_u16()? * 2) as usize;
   if payload_len >= x3::Frame::MAX_LENGTH {
     return Err(X3Error::FrameLength);
   }

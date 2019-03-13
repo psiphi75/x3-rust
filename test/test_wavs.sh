@@ -82,3 +82,35 @@ do
 
 done
 
+#
+# Now test and decode the .bin file from OceanInstruments
+#
+
+# build it
+cargo build --${TARGET} --features "oceaninstruments"
+
+SOUNDS=$(ls $SOUND_DIR/*.bin)
+for X3BIN in ${SOUNDS}
+do
+
+  echo "Testing $X3BIN"
+  X3BIN_WAV=${X3BIN}.wav
+
+  echo "  Decoding ${X3BIN} to ${TEMP_WAV}"
+  $X3 --input $X3BIN --output $TEMP_WAV > /dev/null 2>&1
+
+  echo "  Checking"
+  $W2S --wav $X3BIN_WAV > "${TEMP_WAV_STR_ORIG}"
+  $W2S --wav $TEMP_WAV > "${TEMP_WAV_STR_TEST}"
+  WAV_DIFF=$(cmp "${TEMP_WAV_STR_ORIG}" "${TEMP_WAV_STR_TEST}")
+  if [ -n "${WAV_DIFF}" ]; then
+    echo "  TEST FAILED"
+    echo ${WAV_DIFF}
+    exit 1
+  fi
+
+  echo "  Ok"
+  echo
+
+done
+

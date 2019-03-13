@@ -19,6 +19,29 @@
  *                                                                        *
  **************************************************************************/
 
+/*
+ *    This work contains a derivative of the work from John Atkins and Mark Johnson.
+ *    This license applies to the following functions. `unpackr`, `integrate`, `unpack`,
+ *    and `decode_block` (oceaninstruments) functions.
+ *
+ *    Copyright (C) 2011-2014, John Atkins and Mark Johnson
+ *
+ *    This work is a derivative of the D3-API Copyright (C) 2008-2010, Mark Johnson
+ *
+ *    This file is part of the SoundTrap software. SoundTrap is an acoustic recording
+ *    system intended for underwater acoustic measurements. This component of the
+ *    SoundTrap project is free software: you can redistribute it and/or modify it
+ *    under the terms of the GNU General Public License as published by the Free Software
+ *    Foundation, either version 3 of the License, or any later version.
+ *
+ *    The SoundTrap software is distributed in the hope that it will be useful, but
+ *    WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ *    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+ *
+ *    You should have received a copy of the GNU General Public License along with this
+ *    code. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 use crate::bitpack::{BitReader, ByteReader};
 use crate::error;
 use crate::x3;
@@ -108,10 +131,6 @@ pub fn decode_frame(
   p_wav: &mut usize,
   samples_written: &mut usize,
 ) -> Result<(), X3Error> {
-  if bytes.remaining_bytes()? < x3::FrameHeader::LENGTH {
-    return Err(X3Error::FrameDecodeUnexpectedEnd);
-  }
-
   // Get the frame header
   let (ns, payload_size) = read_frame_header(bytes)?;
 
@@ -154,6 +173,10 @@ pub fn decode_frame(
 ///
 #[cfg(not(feature = "oceaninstruments"))]
 pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Error> {
+  if bytes.remaining_bytes()? < x3::FrameHeader::LENGTH {
+    return Err(X3Error::FrameDecodeUnexpectedEnd);
+  }
+
   // Calc header CRC
   let expected_header_crc = bytes.crc16(x3::FrameHeader::HEADER_CRC_BYTE)?;
 
@@ -218,6 +241,10 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
 //   Audio Data (up to 2048 bytes)
 #[cfg(feature = "oceaninstruments")]
 pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Error> {
+  if bytes.remaining_bytes()? < x3::FrameHeader::LENGTH {
+    return Err(X3Error::FrameDecodeUnexpectedEnd);
+  }
+
   // Calc header CRC
   let _expected_header_crc = bytes.crc16(x3::FrameHeader::HEADER_CRC_BYTE)?;
 
@@ -500,6 +527,7 @@ pub fn decode_block(
 //
 //
 
+#[cfg(not(feature = "oceaninstruments"))]
 #[cfg(test)]
 mod tests {
   use crate::bitpack::BitReader;

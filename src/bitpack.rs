@@ -518,6 +518,7 @@ impl<'a> ByteReader<'a> {
 //
 //
 
+#[cfg(not(feature = "oceaninstruments"))]
 #[cfg(test)]
 mod tests {
   use crate::bitpack::{BitPacker, BitReader};

@@ -402,10 +402,10 @@ impl<'a> ByteReader<'a> {
     for i in self.p_byte..self.array.len() {
       let a0 = self.array[i];
       let a1 = self.array[i + 1];
-      self.p_byte += 1;
       if a0 == b0 && a1 == b1 {
         return true;
       }
+      self.p_byte += 1;
     }
     false
   }

@@ -410,6 +410,14 @@ impl<'a> ByteReader<'a> {
     false
   }
 
+  pub fn extract(&self, p_start: usize, p_end: usize) -> Result<Vec<u8>, BitPackError> {
+    if p_start > self.array.len() || p_end > self.array.len() {
+      Err(BitPackError::ArrayEndReached)
+    } else {
+      Ok(self.array[p_start..p_end].to_vec())
+    }
+  }
+
   ///
   /// Check if `buf` and ByteReader array at the current read position contain the
   /// same information.

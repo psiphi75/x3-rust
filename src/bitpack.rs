@@ -391,6 +391,25 @@ impl<'a> ByteReader<'a> {
     self.p_byte = 0;
   }
 
+  pub fn find_le_u16(&mut self, word: u16) -> bool {
+    if self.p_byte >= self.array.len() {
+      return false;
+    }
+
+    let b0 = (word >> 8) as u8;
+    let b1 = (word & 255) as u8;
+
+    for i in self.p_byte..self.array.len() {
+      let a0 = self.array[i];
+      let a1 = self.array[i + 1];
+      self.p_byte += 1;
+      if a0 == b0 && a1 == b1 {
+        return true;
+      }
+    }
+    false
+  }
+
   ///
   /// Check if `buf` and ByteReader array at the current read position contain the
   /// same information.

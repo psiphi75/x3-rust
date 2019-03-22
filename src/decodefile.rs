@@ -87,7 +87,7 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
 
   let mut buf = Vec::new();
   file.read_to_end(&mut buf).unwrap();
-  let bytes = &mut ByteReader::new(&mut buf);
+  let bytes = &mut ByteReader::new(&buf);
 
   let (sample_rate, params) = read_header(bytes)?;
 

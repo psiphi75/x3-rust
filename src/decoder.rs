@@ -303,6 +303,10 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
   Ok((num_samples, payload_len))
 }
 
+pub fn move_to_next_frame(bytes: &mut ByteReader) {
+  bytes.find_le_u16(x3::FrameHeader::KEY);
+}
+
 ///
 /// Decode a block of compressed x3 data.  This function will determine weather to
 /// use the Rice Code method, or the BFP method.

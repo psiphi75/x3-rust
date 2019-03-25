@@ -74,7 +74,6 @@ fn peek_first_frame(bytes: &mut ByteReader) -> Result<usize, X3Error> {
 
 fn find_next_frame(bytes: &mut ByteReader) -> Result<(), X3Error> {
   bytes.inc_counter(1)?;
-  // bytes.find_u16_from_bookmark(x3::FrameHeader::KEY, bytes.remaining_bytes()?)?;
   Ok(())
 }
 
@@ -98,7 +97,7 @@ pub fn decode_frames(bytes: &mut ByteReader, params: &x3::Parameters) -> Result<
     let mut samples_written = 0;
     match decode_frame(bytes, &mut wav, &params, &mut p_wav, &mut samples_written) {
       Ok(()) => {}
-      Err(X3Error::FrameHeaderInvalidPayloadLen) => eprintln!("The last frame was not complete"),
+      Err(X3Error::FrameHeaderInvalidPayloadLen) => eprintln!("The final frame was not complete"),
       Err(_) => match find_next_frame(bytes) {
         Ok(()) => (),
         Err(_) => eprintln!("An error occurred decoding a frame"), // this is okay, since we only hit the end of the array
@@ -106,7 +105,6 @@ pub fn decode_frames(bytes: &mut ByteReader, params: &x3::Parameters) -> Result<
     };
     total_samples_written += samples_written;
   }
-  println!("Samples written: {}", total_samples_written);
 
   // Resize to the length of uncompressed bytes
   wav.resize(total_samples_written, 0);

@@ -97,7 +97,6 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
     bytes.reset();
   }
 
-  println!("sample_rate: {}\nblock_len: {}", sample_rate, params.block_len);
   let wav = decoder::decode_frames(bytes, &params)?;
 
   let spec = hound::WavSpec {

@@ -49,6 +49,7 @@ pub enum X3Error {
 
   // Decoding issues
   FrameDecodeInvalidBlockLength, // The block length is bad
+  FrameDecodeInvalidIndex,       // Invalid rice code encountered, index out of range
   FrameDecodeInvalidNTOGO,       // Invalid ntogo
   FrameDecodeInvalidRiceCode,    // The Rice codes are invalid
   FrameDecodeInvalidBPF,         // The BPF decoder blew up, an invalid value was reached.

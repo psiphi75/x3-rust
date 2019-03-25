@@ -137,9 +137,9 @@ pub fn decode_frame(
   #[cfg(not(feature = "oceaninstruments"))]
   let mut last_wav = bytes.read_be_i16()?;
   #[cfg(feature = "oceaninstruments")]
-  let mut last_wav = bytes.read_le_i16()?;
+  let mut last_wav = i32::from(bytes.read_le_i16()?);
 
-  wav[*p_wav] = last_wav;
+  wav[*p_wav] = last_wav as i16;
   *p_wav += 1;
   *samples_written += 1;
 
@@ -411,9 +411,10 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> 
 #[cfg(feature = "oceaninstruments")]
 const RSUFFS: [usize; 3] = [0, 1, 3];
 #[cfg(feature = "oceaninstruments")]
-const IRT: &'static [i16; 53] = &[
+const IRT: &'static [i16; 60] = &[
   0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6, -7, 7, -8, 8, -9, 9, -10, 10, -11, 11, -12, 12, -13, 13, -14, 14, -15,
-  15, -16, 16, -17, 17, -18, 18, -19, 19, -20, 20, -21, 21, -22, 22, -23, 23, -24, 24, -25, 25, -26, 26,
+  15, -16, 16, -17, 17, -18, 18, -19, 19, -20, 20, -21, 21, -22, 22, -23, 23, -24, 24, -25, 25, -26, 26, -27, 27, -28,
+  28, -29, 29, -30,
 ];
 
 #[cfg(feature = "oceaninstruments")]
@@ -451,7 +452,11 @@ fn unpackr(br: &mut BitReader, wav: &mut [i16], n: usize, code: usize) -> Result
     ntogo -= ns + nsuffix;
     suff = (ow >> ntogo) & (lev - 1);
     ow &= (1 << ntogo) - 1;
-    wav[k] = IRT[lev * (ns - 1) + suff];
+    let idx = lev * (ns - 1) + suff;
+    if idx >= IRT.len() {
+      return Err(X3Error::FrameDecodeInvalidIndex);
+    }
+    wav[k] = IRT[idx];
   }
   if ntogo > 0 {
     return Err(X3Error::FrameDecodeInvalidNTOGO); //error
@@ -461,12 +466,12 @@ fn unpackr(br: &mut BitReader, wav: &mut [i16], n: usize, code: usize) -> Result
 }
 
 #[cfg(feature = "oceaninstruments")]
-fn integrate(wav: &mut [i16], last_wav: &mut i16, count: usize) {
+fn integrate(wav: &mut [i16], last_wav: &mut i32, count: usize) {
   // De-emphasis filter to reverse the diff in the compressor.
   // Filter operates in-place.
   for k in 0..count {
-    *last_wav += wav[k];
-    wav[k] = *last_wav;
+    *last_wav += i32::from(wav[k]);
+    wav[k] = *last_wav as i16;
   }
 }
 
@@ -482,7 +487,7 @@ fn unpack(br: &mut BitReader, wav: &mut [i16], nb: usize, count: usize) -> Resul
 pub fn decode_block(
   br: &mut BitReader,
   wav: &mut [i16],
-  last_wav: &mut i16,
+  last_wav: &mut i32,
   _params: &x3::Parameters,
 ) -> Result<usize, X3Error> {
   let mut nb = 0;

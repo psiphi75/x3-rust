@@ -399,7 +399,7 @@ impl<'a> ByteReader<'a> {
     let b0 = (word >> 8) as u8;
     let b1 = (word & 255) as u8;
 
-    for i in self.p_byte..self.array.len() {
+    for i in self.p_byte..self.array.len() - 1 {
       let a0 = self.array[i];
       let a1 = self.array[i + 1];
       if a0 == b0 && a1 == b1 {

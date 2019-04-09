@@ -301,9 +301,10 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
   Ok((num_samples, payload_len))
 }
 
-pub fn move_to_next_frame(bytes: &mut ByteReader) {
-  bytes.inc_counter(1);
+pub fn move_to_next_frame(bytes: &mut ByteReader) -> Result<(), X3Error> {
+  bytes.inc_counter(1)?;
   bytes.find_le_u16(x3::FrameHeader::KEY);
+  Ok(())
 }
 
 ///

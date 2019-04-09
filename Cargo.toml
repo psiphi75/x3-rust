@@ -1,7 +1,7 @@
 [package]
 name = "x3"
 description = "A CPU efficient audio encoder/decoder using the X3 codec."
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Simon M. Werner <simonwerner@gmail.com>"]
 license = "GPL-3.0-or-later"
 readme = "README.md"

@@ -531,6 +531,10 @@ impl<'a> ByteReader<'a> {
   pub fn crc16(&self, num_bytes: usize) -> Result<u16, BitPackError> {
     Ok(crc16(&self.array[self.p_byte..(self.p_byte + num_bytes)]))
   }
+
+  pub fn get_pos(&self) -> usize {
+    self.p_byte
+  }
 }
 
 //

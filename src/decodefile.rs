@@ -131,6 +131,10 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
 /// Read the frame header to the ByteReader output.
 ///
 fn read_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error> {
+  // Move to the beginning of the next frame, this is helpful when we are reading the middle of
+  // a stream.
+  decoder::move_to_next_frame(bytes)?;
+
   let buf = &mut [0u8; x3::FrameHeader::HEADER_CRC_BYTE];
   bytes.read(buf)?;
 
@@ -257,12 +261,17 @@ fn parse_xml(xml: &str) -> Result<(u32, x3::Parameters), X3Error> {
 //
 //
 
-// #[cfg(test)]
-// mod tests {
-//   use crate::decodefile::x3a_to_wav;
+#[cfg(test)]
+mod tests {
+  use crate::decodefile::{x3a_to_wav, x3bin_to_wav};
 
-//   #[test]
-//   fn test_decodefile() {
-//     x3a_to_wav("~/x3/rust/test.x3a", "~/x3/rust/test-test.wav").unwrap();
-//   }
-// }
+  #[test]
+  fn test_decode_bin_file() {
+    x3bin_to_wav("~/tmp/test.bin", "~/tmp/test.linux.wav").unwrap();
+  }
+
+  #[test]
+  fn test_decode_x3a_file() {
+    x3a_to_wav("~/tmp/test.x3a", "~/tmp/test.wav").unwrap();
+  }
+}

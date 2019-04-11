@@ -53,10 +53,23 @@ fn estimate_total_length(num_bytes: usize) -> usize {
   num_bytes * 10
 }
 
+pub enum FrameTest {
+  IsFrame,
+  EndOfBuffer,
+  NotFrame,
+}
+
 pub fn move_to_next_frame(bytes: &mut ByteReader) -> Result<(), X3Error> {
-  bytes.inc_counter(1)?;
-  bytes.find_le_u16(x3::FrameHeader::KEY);
-  Ok(())
+  loop {
+    match is_valid_frame(bytes) {
+      FrameTest::IsFrame => return Ok(()),
+      FrameTest::EndOfBuffer => return Err(X3Error::FrameDecodeUnexpectedEnd),
+      FrameTest::NotFrame => {
+        bytes.inc_counter(1)?;
+        bytes.find_le_u16(x3::FrameHeader::KEY);
+      }
+    }
+  }
 }
 
 ///
@@ -136,8 +149,8 @@ pub fn decode_frame(
 
   let br_payload_size = payload_size - 2;
   let mut buf = &mut vec![0; br_payload_size];
-  bytes.read(&mut buf)?;
-  let br = &mut BitReader::new(&mut buf);
+  let bytes_written = bytes.read(&mut buf)?;
+  let br = &mut BitReader::new(&mut buf[..bytes_written]);
 
   let mut remaining_samples = ns - 1;
 
@@ -153,12 +166,6 @@ pub fn decode_frame(
   Ok(())
 }
 
-pub enum FrameTest {
-  Ok,
-  EndOfBuffer,
-  NotOk,
-}
-
 ///
 /// Check if `bytes` are currently pointing to a valid frame.  It checks the
 /// header and the CRC packets.  It also looks for the next frame.
@@ -169,10 +176,10 @@ pub fn is_valid_frame(bytes: &mut ByteReader) -> FrameTest {
   bytes.set_pos(p_byte);
 
   match result {
-    Ok(_) => FrameTest::Ok,
+    Ok(_) => FrameTest::IsFrame,
     Err(X3Error::BitPack(BitPackError::ArrayEndReached)) => FrameTest::EndOfBuffer,
     Err(X3Error::FrameDecodeUnexpectedEnd) => FrameTest::EndOfBuffer,
-    Err(_) => FrameTest::NotOk,
+    Err(_) => FrameTest::NotFrame,
   }
 }
 

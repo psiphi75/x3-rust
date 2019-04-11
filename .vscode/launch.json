@@ -9,7 +9,13 @@
       "request": "launch",
       "name": "Debug x3 test",
       "cargo": {
-        "args": ["test", "--no-run", "--lib", "--features", "oceaninstruments"]
+        "args": [
+          "test",
+          "--no-run",
+          "--lib",
+          // "--features", "oceaninstruments",
+          "test_decode_x3a_file"
+        ]
       },
       "program": "${cargo:program}",
       "args": []

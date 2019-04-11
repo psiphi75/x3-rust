@@ -493,17 +493,19 @@ impl<'a> ByteReader<'a> {
   /// ### Arguments
   /// * `buf` - The array where the bytes will be written to.
   ///
-  pub fn read(&mut self, buf: &mut [u8]) -> Result<(), BitPackError> {
-    if self.p_byte + buf.len() >= self.array.len() {
-      return Err(BitPackError::ArrayEndReached);
-    }
+  pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, BitPackError> {
+    let bytes_written = if buf.len() > self.remaining_bytes()? {
+      self.remaining_bytes()?
+    } else {
+      buf.len()
+    };
 
-    for (i, p_buf) in buf.iter_mut().enumerate() {
+    for (i, p_buf) in buf[..bytes_written].iter_mut().enumerate() {
       *p_buf = self.array[self.p_byte + i];
     }
-    self.p_byte += buf.len();
+    self.p_byte += bytes_written;
 
-    Ok(())
+    Ok(bytes_written)
   }
 
   ///

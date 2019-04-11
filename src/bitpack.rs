@@ -391,6 +391,14 @@ impl<'a> ByteReader<'a> {
     self.p_byte = 0;
   }
 
+  pub fn set_pos(&mut self, p_byte: usize) {
+    self.p_byte = p_byte;
+  }
+
+  pub fn get_pos(&self) -> usize {
+    self.p_byte
+  }
+
   pub fn find_le_u16(&mut self, word: u16) -> bool {
     if self.p_byte >= self.array.len() {
       return false;
@@ -428,15 +436,15 @@ impl<'a> ByteReader<'a> {
   /// * `buf` - The array where the bytes will be written to.
   ///
   #[inline(always)]
-  pub fn eq(&self, buf: &[u8]) -> Result<(bool), BitPackError> {
+  pub fn eq(&self, buf: &[u8]) -> bool {
     let mut p = self.p_byte;
     for b in buf {
       if *b != self.array[p] {
-        return Ok(false);
+        return false;
       };
       p += 1;
     }
-    Ok(true)
+    true
   }
 
   ///
@@ -457,6 +465,9 @@ impl<'a> ByteReader<'a> {
   ///
   #[inline(always)]
   pub fn inc_counter(&mut self, n_bytes: usize) -> Result<(), BitPackError> {
+    if self.p_byte + n_bytes >= self.array.len() {
+      return Err(BitPackError::ArrayEndReached);
+    }
     self.p_byte += n_bytes;
 
     Ok(())
@@ -468,6 +479,9 @@ impl<'a> ByteReader<'a> {
   ///
   #[inline(always)]
   pub fn dec_counter(&mut self, n_bytes: usize) -> Result<(), BitPackError> {
+    if n_bytes > self.p_byte {
+      return Err(BitPackError::BoundaryReached);
+    }
     self.p_byte -= n_bytes;
 
     Ok(())
@@ -480,6 +494,10 @@ impl<'a> ByteReader<'a> {
   /// * `buf` - The array where the bytes will be written to.
   ///
   pub fn read(&mut self, buf: &mut [u8]) -> Result<(), BitPackError> {
+    if self.p_byte + buf.len() >= self.array.len() {
+      return Err(BitPackError::ArrayEndReached);
+    }
+
     for (i, p_buf) in buf.iter_mut().enumerate() {
       *p_buf = self.array[self.p_byte + i];
     }
@@ -529,11 +547,11 @@ impl<'a> ByteReader<'a> {
   }
 
   pub fn crc16(&self, num_bytes: usize) -> Result<u16, BitPackError> {
-    Ok(crc16(&self.array[self.p_byte..(self.p_byte + num_bytes)]))
-  }
-
-  pub fn get_pos(&self) -> usize {
-    self.p_byte
+    if self.p_byte + num_bytes > self.array.len() {
+      Err(BitPackError::ArrayEndReached)
+    } else {
+      Ok(crc16(&self.array[self.p_byte..(self.p_byte + num_bytes)]))
+    }
   }
 }
 

@@ -57,7 +57,10 @@ pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Res
   file.read_to_end(&mut buf).unwrap();
   let bytes = &mut ByteReader::new(&buf);
   let (sample_rate, params) = read_archive_header(bytes).expect("Invalid X3 Archive header");
-  let wav = decoder::decode_frames(bytes, &params)?;
+  let (wav, num_errors) = decoder::decode_frames(bytes, &params)?;
+  if num_errors > 0 {
+    eprintln!("Encountered {} decoding errors", num_errors);
+  }
 
   let spec = hound::WavSpec {
     channels: 1,
@@ -82,7 +85,11 @@ pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Res
 /// * `x3bin_filename` - the input x3 bin (.bin) file to decode.
 /// * `wav_filename` - the output wav file to write to.  It will be overwritten.
 ///
-pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) -> Result<(), X3Error> {
+/// ### Returns
+///
+/// * errors - The number of encoding errors encountered
+///
+pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) -> Result<usize, X3Error> {
   let mut file = File::open(x3bin_filename).unwrap();
 
   let mut buf = Vec::new();
@@ -97,7 +104,10 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
     bytes.reset();
   }
 
-  let wav = decoder::decode_frames(bytes, &params)?;
+  let (wav, num_errors) = decoder::decode_frames(bytes, &params)?;
+  if num_errors > 0 {
+    eprintln!("Encountered {} decoding errors", num_errors);
+  }
 
   let spec = hound::WavSpec {
     channels: 1,
@@ -106,12 +116,15 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
     sample_format: hound::SampleFormat::Int,
   };
 
-  let mut writer = hound::WavWriter::create(wav_filename, spec)?;
+  // writer_u16 is faster than the plain writer
+  let mut writer = hound::WavWriter::create(wav_filename, spec).unwrap();
+  let mut writer_u16 = writer.get_i16_writer(wav.len() as u32);
   for w in wav {
-    writer.write_sample(w)?;
+    writer_u16.write_sample(w);
   }
+  writer_u16.flush()?;
 
-  Ok(())
+  Ok(num_errors)
 }
 
 ///
@@ -137,7 +150,7 @@ fn read_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error>
 ///
 fn read_archive_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error> {
   // <Archive Id>
-  if !bytes.eq(x3::Archive::ID)? {
+  if !bytes.eq(x3::Archive::ID) {
     return Err(X3Error::ArchiveHeaderXMLInvalidKey);
   }
   bytes.inc_counter(x3::Archive::ID.len())?;

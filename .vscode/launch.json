@@ -7,6 +7,16 @@
     {
       "type": "lldb",
       "request": "launch",
+      "name": "Debug x3 test",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--features", "oceaninstruments"]
+      },
+      "program": "${cargo:program}",
+      "args": []
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
       "name": "Debug 'x3'",
       "cargo": {
         "args": ["test", "--no-run", "--lib", "--package=x3"],

@@ -25,8 +25,6 @@ use std::io::prelude::*;
 use std::path;
 
 // externs
-#[cfg(feature = "oceaninstruments")]
-use crate::byteorder::{BigEndian, ByteOrder};
 use crate::hound;
 
 // this crate
@@ -98,12 +96,6 @@ pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) ->
 
   let (sample_rate, params) = read_header(bytes)?;
 
-  // For OceanInstruments, the file header is the first frame.
-  #[cfg(feature = "oceaninstruments")]
-  {
-    bytes.reset();
-  }
-
   let (wav, num_errors) = decoder::decode_frames(bytes, &params)?;
   if num_errors > 0 {
     eprintln!("Encountered {} decoding errors", num_errors);
@@ -138,11 +130,7 @@ fn read_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error>
   let buf = &mut [0u8; x3::FrameHeader::HEADER_CRC_BYTE];
   bytes.read(buf)?;
 
-  #[cfg(not(feature = "oceaninstruments"))]
   let sample_rate = 48000; // FIXME: Need to set this somehow else
-
-  #[cfg(feature = "oceaninstruments")]
-  let sample_rate = BigEndian::read_u16(&buf[x3::FrameHeader::SAMPLE_RATE_BYTE..]);
 
   let params = x3::Parameters::default();
 

@@ -19,29 +19,6 @@
  *                                                                        *
  **************************************************************************/
 
-/*
- *    This work contains a derivative of the work from John Atkins and Mark Johnson.
- *    This license applies to the following functions. `unpackr`, `integrate`, `unpack`,
- *    and `decode_block` (oceaninstruments) functions.
- *
- *    Copyright (C) 2011-2014, John Atkins and Mark Johnson
- *
- *    This work is a derivative of the D3-API Copyright (C) 2008-2010, Mark Johnson
- *
- *    This file is part of the SoundTrap software. SoundTrap is an acoustic recording
- *    system intended for underwater acoustic measurements. This component of the
- *    SoundTrap project is free software: you can redistribute it and/or modify it
- *    under the terms of the GNU General Public License as published by the Free Software
- *    Foundation, either version 3 of the License, or any later version.
- *
- *    The SoundTrap software is distributed in the hope that it will be useful, but
- *    WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- *    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- *
- *    You should have received a copy of the GNU General Public License along with this
- *    code. If not, see <http://www.gnu.org/licenses/>.
- */
-
 use crate::bitpack::{BitPackError, BitReader, ByteReader};
 use crate::error;
 use crate::x3;
@@ -138,10 +115,7 @@ pub fn decode_frame(
   // Get the frame header
   let (ns, payload_size) = read_frame_header(bytes)?;
 
-  #[cfg(not(feature = "oceaninstruments"))]
   let mut last_wav = bytes.read_be_i16()?;
-  #[cfg(feature = "oceaninstruments")]
-  let mut last_wav = i32::from(bytes.read_le_i16()?);
 
   wav[*p_wav] = last_wav as i16;
   *p_wav += 1;
@@ -192,7 +166,6 @@ pub fn is_valid_frame(bytes: &mut ByteReader) -> FrameTest {
 ///
 /// * `br` - the data to decode as a BitReader.
 ///
-#[cfg(not(feature = "oceaninstruments"))]
 pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Error> {
   if bytes.remaining_bytes()? < x3::FrameHeader::LENGTH {
     return Err(X3Error::FrameDecodeUnexpectedEnd);
@@ -249,80 +222,6 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
   Ok((num_samples, payload_len))
 }
 
-// Uses the following setup for the FrameHeader:
-//   Preamble for synchronisation (2 bytes) - "ST"
-//   Packet Type (2 bytes) - ignored
-//   Packet size (2 bytes) - Big Endian
-//   *Number of samples (2 bytes) - Big Endian
-//   Acquisition Date/Time Stamp (unix time) (4 bytes) - Big Endian
-//   Acquisition Date/Time Stamp (microseconds) (4 bytes) - Big Endian
-//   Unused (2 bytes) - ignored
-//   *SampleRate(2 bytes) - Big Endian
-//   Unused (4 bytes) - ignored
-//   Audio Data (up to 2048 bytes)
-#[cfg(feature = "oceaninstruments")]
-pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Error> {
-  if bytes.remaining_bytes()? < x3::FrameHeader::LENGTH {
-    return Err(X3Error::FrameDecodeUnexpectedEnd);
-  }
-
-  // Calc header CRC
-  let _expected_header_crc = bytes.crc16(x3::FrameHeader::HEADER_CRC_BYTE)?;
-
-  // Read <Frame Key>
-  if !bytes.eq(x3::FrameHeader::KEY_BUF) {
-    return Err(X3Error::FrameHeaderInvalidKey);
-  }
-  bytes.inc_counter(x3::FrameHeader::KEY_BUF.len())?;
-
-  // <Source Id>
-  // Currently just skip it
-  bytes.inc_counter(1)?;
-
-  // <Num Channels>
-  let num_channels = bytes.read_u8()?;
-  if num_channels > 1 {
-    return Err(X3Error::MoreThanOneChannel);
-  }
-
-  // <Payload Length> - length in bytes, it's stored as length in words
-  let payload_len = bytes.read_be_u16()? as usize * 2;
-  if payload_len >= x3::Frame::MAX_LENGTH {
-    return Err(X3Error::FrameLength);
-  }
-
-  // <Num Samples>
-  let num_samples = bytes.read_be_u16()? as usize;
-
-  // <Time>
-  // Skip time
-  bytes.inc_counter(8)?;
-
-  // Unused
-  bytes.inc_counter(2)?;
-
-  // Ignore sample rate
-  let _sample_rate = bytes.inc_counter(2)?;
-
-  // TODO: This may be turned on the future
-  // <Header CRC>
-  let _header_crc = bytes.read_be_u16()?;
-  // if expected_header_crc != header_crc {
-  //   return Err(X3Error::FrameHeaderInvalidHeaderCRC);
-  // }
-
-  // <Payload CRC>
-  let _payload_crc = bytes.read_be_u16()?;
-  if bytes.remaining_bytes()? < payload_len {
-    return Err(X3Error::FrameHeaderInvalidPayloadLen);
-  }
-  let _expected_payload_crc = bytes.crc16(payload_len)?;
-  // if expected_payload_crc != payload_crc {
-  //   return Err(X3Error::FrameHeaderInvalidPayloadCRC);
-  // }
-
-  Ok((num_samples, payload_len))
-}
 
 ///
 /// Decode a block of compressed x3 data.  This function will determine weather to
@@ -336,7 +235,6 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
 /// * `block_len` - how many bytes the decoded block will be.
 /// * `params` - the audio properties.
 ///
-#[cfg(not(feature = "oceaninstruments"))]
 pub fn decode_block(
   br: &mut BitReader,
   wav: &mut [i16],
@@ -351,7 +249,6 @@ pub fn decode_block(
   }
 }
 
-#[cfg(not(feature = "oceaninstruments"))]
 fn decode_ricecode_block(
   br: &mut BitReader,
   wav: &mut [i16],
@@ -396,7 +293,6 @@ fn unsigned_to_i16(a: u16, num_bits: usize) -> i16 {
   a as i16
 }
 
-#[cfg(not(feature = "oceaninstruments"))]
 fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> Result<usize, X3Error> {
   // This is a BFP or pass-through block
   let num_bits = (br.read_nbits(4)? + 1) as usize; // Read the rest of the block header
@@ -425,122 +321,6 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> 
   Ok(wav.len())
 }
 
-#[cfg(feature = "oceaninstruments")]
-const RSUFFS: [usize; 3] = [0, 1, 3];
-#[cfg(feature = "oceaninstruments")]
-const IRT: &'static [i16; 60] = &[
-  0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6, -7, 7, -8, 8, -9, 9, -10, 10, -11, 11, -12, 12, -13, 13, -14, 14, -15,
-  15, -16, 16, -17, 17, -18, 18, -19, 19, -20, 20, -21, 21, -22, 22, -23, 23, -24, 24, -25, 25, -26, 26, -27, 27, -28,
-  28, -29, 29, -30,
-];
-
-#[cfg(feature = "oceaninstruments")]
-fn unpackr(br: &mut BitReader, wav: &mut [i16], n: usize, code: usize) -> Result<(), X3Error> {
-  // unpacker for variable length Rice codes
-  // Returns 0 if ok, 1 if there are not enough bits in the stream.
-  let mut ow = 0;
-  let mut msk;
-  let mut ntogo = 0;
-  let mut ns;
-  let mut suff;
-  let nsuffix = RSUFFS[code];
-  let lev = 1 << nsuffix;
-
-  for k in 0..n {
-    // Do for n words
-    // First find the end of the variable length section.
-    // If there is an end and a complete suffix in the current word, it will
-    // have a value of at least 1<<nsuffix. If not, append the next word from
-    // the stream
-
-    ntogo = br.read_int_larger_than(lev, &mut ow)?;
-
-    // ow is now guaranteed to have a start and a suffix.
-    // Find the start (i.e., the first 1 bit from the left)
-    ns = 1;
-    msk = 1 << (ntogo - 1);
-    while ns <= ntogo && (ow & msk) == 0 {
-      ns += 1;
-      msk >>= 1;
-    }
-    if ns > ntogo {
-      return Err(X3Error::FrameDecodeInvalidRiceCode); //error
-    }
-    ntogo -= ns + nsuffix;
-    suff = (ow >> ntogo) & (lev - 1);
-    ow &= (1 << ntogo) - 1;
-    let idx = lev * (ns - 1) + suff;
-    if idx >= IRT.len() {
-      return Err(X3Error::FrameDecodeInvalidIndex);
-    }
-    wav[k] = IRT[idx];
-  }
-  if ntogo > 0 {
-    return Err(X3Error::FrameDecodeInvalidNTOGO); //error
-  }
-
-  Ok(())
-}
-
-#[cfg(feature = "oceaninstruments")]
-fn integrate(wav: &mut [i16], last_wav: &mut i32, count: usize) {
-  // De-emphasis filter to reverse the diff in the compressor.
-  // Filter operates in-place.
-  for k in 0..count {
-    *last_wav += i32::from(wav[k]);
-    wav[k] = *last_wav as i16;
-  }
-}
-
-#[cfg(feature = "oceaninstruments")]
-fn unpack(br: &mut BitReader, wav: &mut [i16], nb: usize, count: usize) -> Result<(), X3Error> {
-  for i in 0..count {
-    wav[i] = unsigned_to_i16(br.read_nbits(nb)?, nb);
-  }
-  Ok(())
-}
-
-#[cfg(feature = "oceaninstruments")]
-pub fn decode_block(
-  br: &mut BitReader,
-  wav: &mut [i16],
-  last_wav: &mut i32,
-  _params: &x3::Parameters,
-) -> Result<usize, X3Error> {
-  let mut nb = 0;
-  let mut code = br.read_nbits(2)?;
-  let mut count = wav.len();
-  if code == 0 {
-    // bfp or pass thru block
-    nb = br.read_nbits(4)?;
-    if nb > 0 {
-      nb += 1;
-    } else {
-      let nn = (br.read_nbits(6)? + 1) as usize;
-      if nn > wav.len() {
-        return Err(X3Error::FrameDecodeInvalidBlockLength);
-      }
-      count = nn;
-      code = br.read_nbits(2)?;
-      if code == 0 {
-        nb = br.read_nbits(4)? + 1;
-      }
-    }
-  }
-  if code > 0 {
-    unpackr(br, wav, count as usize, (code - 1) as usize)?;
-  } else {
-    unpack(br, wav, nb as usize, count)?;
-    if nb == 16 {
-      return Ok(count);
-    }
-  }
-
-  integrate(wav, last_wav, wav.len());
-
-  Ok(count)
-}
-
 //
 //
 //            #######
@@ -553,7 +333,6 @@ pub fn decode_block(
 //
 //
 
-#[cfg(not(feature = "oceaninstruments"))]
 #[cfg(test)]
 mod tests {
   use crate::bitpack::BitReader;

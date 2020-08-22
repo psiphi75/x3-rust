@@ -381,7 +381,6 @@ fn x3_encode_block(
 //
 //
 
-#[cfg(not(feature = "oceaninstruments"))]
 #[cfg(test)]
 mod tests {
   use crate::bitpack::BitPacker;

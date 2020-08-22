@@ -247,20 +247,19 @@ pub struct BitReader<'a> {
 
 impl<'a> BitReader<'a> {
   pub fn new(array: &'a mut [u8]) -> BitReader {
-    // OceanInstruments reads the byte stream as big-endian
-    #[cfg(feature = "oceaninstruments")]
-    {
-      for i in (0..array.len()).step_by(2) {
-        let j = i + 1;
-        if j >= array.len() {
-          break;
-        }
-        let a = array[i];
-        let b = array[j];
-        array[i] = b;
-        array[j] = a;
-      }
-    }
+    // FIXME: Need to handle big-endian, this "fixes" it, but it's ugly.
+    // {
+    //   for i in (0..array.len()).step_by(2) {
+    //     let j = i + 1;
+    //     if j >= array.len() {
+    //       break;
+    //     }
+    //     let a = array[i];
+    //     let b = array[j];
+    //     array[i] = b;
+    //     array[j] = a;
+    //   }
+    // }
 
     BitReader {
       array,
@@ -569,7 +568,6 @@ impl<'a> ByteReader<'a> {
 //
 //
 
-#[cfg(not(feature = "oceaninstruments"))]
 #[cfg(test)]
 mod tests {
   use crate::bitpack::{BitPacker, BitReader};

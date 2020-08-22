@@ -251,15 +251,15 @@ fn parse_xml(xml: &str) -> Result<(u32, x3::Parameters), X3Error> {
 
 #[cfg(test)]
 mod tests {
-  use crate::decodefile::{x3a_to_wav, x3bin_to_wav};
+//   use crate::decodefile::{x3a_to_wav, x3bin_to_wav};
 
-  #[test]
-  fn test_decode_bin_file() {
-    x3bin_to_wav("~/tmp/test.bin", "~/tmp/test.linux.wav").unwrap();
-  }
+//   #[test]
+//   fn test_decode_bin_file() {
+//     x3bin_to_wav("~/tmp/test.bin", "~/tmp/test.linux.wav").unwrap();
+//   }
 
-  #[test]
-  fn test_decode_x3a_file() {
-    x3a_to_wav("~/tmp/test.x3a", "~/tmp/test.wav").unwrap();
-  }
+//   #[test]
+//   fn test_decode_x3a_file() {
+//     x3a_to_wav("~/tmp/test.x3a", "~/tmp/test.wav").unwrap();
+//   }
 }

@@ -20,9 +20,11 @@
  **************************************************************************/
 
 // std
-use std::fs::File;
-use std::io::prelude::*;
+// use std::fs::File;
+// use std::io::{prelude::*, BufReader};
 use std::path;
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, BufReader};
 
 // externs
 use crate::hound;
@@ -31,11 +33,141 @@ use crate::hound;
 use crate::bitpack::ByteReader;
 use crate::decoder;
 use crate::error;
-use crate::x3;
+use crate::{crc, x3};
 
+use crate::x3::{FrameHeader, X3aSpec};
 use error::X3Error;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+
+pub const X3_READ_BUFFER_SIZE: usize = 1024 * 16;
+pub const X3_WRITE_BUFFER_SIZE: usize = X3_READ_BUFFER_SIZE * 8; // TODO: Need to make sure we
+
+pub struct X3aReader {
+  reader: BufReader<File>,
+  spec: X3aSpec,
+  remaing_bytes: usize,
+  read_buf: [u8; X3_READ_BUFFER_SIZE],
+
+  /// The count of errors.
+  /// TODO: Count each type of error
+  errors: usize,
+}
+
+impl X3aReader {
+  pub async fn open<P: AsRef<path::Path>>(filename: P) -> Result<Self, X3Error> {
+    let file = File::open(filename).await.unwrap();
+    let mut remaing_bytes = file.metadata().await?.len() as usize;
+    let mut reader = BufReader::with_capacity(64 * 1024, file);
+
+    let (spec, header_size) = read_archive_header(&mut reader).await?;
+    remaing_bytes -= header_size;
+
+    Ok(Self {
+      reader,
+      spec,
+      remaing_bytes,
+      read_buf: [0u8; X3_READ_BUFFER_SIZE],
+      errors: 0,
+    })
+  }
+
+  pub fn spec(&self) -> &X3aSpec {
+    &self.spec
+  }
+
+  async fn read_bytes(&mut self, buf_len: usize) -> Result<usize, X3Error> {
+    let result = self.reader.read_exact(&mut self.read_buf[0..buf_len]).await?;
+    self.remaing_bytes -= buf_len;
+    Ok(result)
+  }
+
+  async fn read_frame_header(&mut self) -> Result<FrameHeader, X3Error> {
+    self.read_bytes(x3::FrameHeader::LENGTH).await?;
+    decoder::read_frame_header_NEW(&self.read_buf[0..x3::FrameHeader::LENGTH])
+  }
+
+  async fn read_frame_payload(&mut self, header: &FrameHeader) -> Result<(), X3Error> {
+    self.read_bytes(header.payload_len).await?;
+
+    let payload = &self.read_buf[0..header.payload_len];
+    let crc = crc::crc16(&payload);
+    if crc != header.payload_crc {
+      return Err(X3Error::FrameHeaderInvalidPayloadCRC);
+    }
+
+    Ok(())
+  }
+
+  pub async fn decode_next_frame(&mut self, wav: &mut [i16; X3_WRITE_BUFFER_SIZE]) -> Result<Option<usize>, X3Error> {
+    // We have reached the end of the file
+    if self.remaing_bytes <= x3::FrameHeader::LENGTH {
+      return Ok(None);
+    }
+
+    // Get the header details
+    let frame_header = self.read_frame_header().await?;
+    let samples = frame_header.samples as usize;
+
+    // Get the Payload
+    self.read_frame_payload(&frame_header).await?;
+    let frame_payload = &self.read_buf[0..frame_header.payload_len];
+    let bytes = &mut ByteReader::new(frame_payload);
+
+    // Do the decoding
+    let mut p_wav = 0; // the pointer to keep a track of `wav` writes
+    let mut samples_written = 0;
+    match decoder::decode_frame_NEW(bytes, wav, &self.spec.params, &mut p_wav, &mut samples_written, samples) {
+      Ok(()) => Ok(Some(samples_written)),
+      Err(err) => {
+        self.errors += 1;
+        println!("ERROR occurred: {:?}", err);
+        Ok(None)
+      }
+    }
+  }
+}
+
+///
+/// Read the <Archive Header> from in the input buffer.
+///
+async fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, usize), X3Error> {
+  // <Archive Id>
+  {
+    let mut arc_header = [0u8; x3::Archive::ID.len()];
+    // read_bytes(&mut reader, &mut arc_header).await?;
+    reader.read_exact(&mut arc_header).await?;
+    if !arc_header.eq(x3::Archive::ID) {
+      return Err(X3Error::ArchiveHeaderXMLInvalidKey);
+    }
+  }
+
+  // <XML MetaData>
+  let header = {
+    let mut header_buf = [0u8; x3::FrameHeader::LENGTH];
+    // read_bytes(&mut reader, &mut header_buf).await?;
+    reader.read_exact(&mut header_buf).await?;
+    decoder::read_frame_header_NEW(&mut header_buf)?
+  };
+
+  // Get the payload
+  let mut payload: Vec<u8> = vec![0; header.payload_len];
+  reader.read_exact(&mut payload).await?;
+  let xml = String::from_utf8_lossy(&payload);
+
+  let (sample_rate, params) = parse_xml(&xml)?;
+
+  let header_size = x3::FrameHeader::LENGTH + payload.len();
+
+  Ok((
+    X3aSpec {
+      sample_rate,
+      params,
+      channels: header.channels,
+    },
+    header_size,
+  ))
+}
 
 ///
 /// Convert an .x3a (X3 Archive) file to a .wav file.  
@@ -48,30 +180,30 @@ use quick_xml::Reader;
 /// * `x3a_filename` - the input X3A file to decode.
 /// * `wav_filename` - the output wav file to write to.  It will be overwritten.
 ///
-pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Result<(), X3Error> {
-  let mut file = File::open(x3a_filename).unwrap();
+pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Result<(), X3Error> {
+  let mut x3a_reader = X3aReader::open(x3a_filename).await?;
 
-  let mut buf = Vec::new();
-  file.read_to_end(&mut buf).unwrap();
-  let bytes = &mut ByteReader::new(&buf);
-  let (sample_rate, params) = read_archive_header(bytes).expect("Invalid X3 Archive header");
-  let (wav, num_errors) = decoder::decode_frames(bytes, &params)?;
-  if num_errors > 0 {
-    eprintln!("Encountered {} decoding errors", num_errors);
-  }
-
+  let x3_spec = x3a_reader.spec();
   let spec = hound::WavSpec {
-    channels: 1,
-    sample_rate: sample_rate as u32,
+    channels: 1, //x3_spec.channels as u16,
+    sample_rate: x3_spec.sample_rate,
     bits_per_sample: 16,
     sample_format: hound::SampleFormat::Int,
   };
 
   let mut writer = hound::WavWriter::create(wav_filename, spec)?;
-  for w in wav {
-    writer.write_sample(w)?;
+  let mut wav = [0i16; X3_WRITE_BUFFER_SIZE];
+  loop {
+    match x3a_reader.decode_next_frame(&mut wav).await? {
+      Some(samples) => {
+        for i in 0..samples {
+          writer.write_sample(wav[i])?;
+        }
+      }
+      None => break,
+    }
   }
-
+  writer.flush()?;
   Ok(())
 }
 
@@ -87,78 +219,37 @@ pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Res
 ///
 /// * errors - The number of encoding errors encountered
 ///
-pub fn x3bin_to_wav<P: AsRef<path::Path>>(x3bin_filename: P, wav_filename: P) -> Result<usize, X3Error> {
-  let mut file = File::open(x3bin_filename).unwrap();
+pub fn x3bin_to_wav<P: AsRef<path::Path>>(_x3bin_filename: P, _wav_filename: P) -> Result<usize, X3Error> {
+  // let mut file = File::open(x3bin_filename).unwrap();
 
-  let mut buf = Vec::new();
-  file.read_to_end(&mut buf).unwrap();
-  let bytes = &mut ByteReader::new(&buf);
+  // let mut buf = Vec::new();
+  // file.read_to_end(&mut buf).unwrap();
+  // let bytes = &mut ByteReader::new(&buf);
 
-  let (sample_rate, params) = read_header(bytes)?;
+  // let (sample_rate, params) = read_header(bytes)?;
 
-  let (wav, num_errors) = decoder::decode_frames(bytes, &params)?;
-  if num_errors > 0 {
-    eprintln!("Encountered {} decoding errors", num_errors);
-  }
+  // let (wav, num_errors) = decoder::decode_frames(bytes, &params)?;
+  // if num_errors > 0 {
+  //   eprintln!("Encountered {} decoding errors", num_errors);
+  // }
 
-  let spec = hound::WavSpec {
-    channels: 1,
-    sample_rate: sample_rate as u32,
-    bits_per_sample: 16,
-    sample_format: hound::SampleFormat::Int,
-  };
+  // let spec = hound::WavSpec {
+  //   channels: 1,
+  //   sample_rate: sample_rate as u32,
+  //   bits_per_sample: 16,
+  //   sample_format: hound::SampleFormat::Int,
+  // };
 
-  // writer_u16 is faster than the plain writer
-  let mut writer = hound::WavWriter::create(wav_filename, spec).unwrap();
-  let mut writer_u16 = writer.get_i16_writer(wav.len() as u32);
-  for w in wav {
-    writer_u16.write_sample(w);
-  }
-  writer_u16.flush()?;
+  // // writer_u16 is faster than the plain writer
+  // let mut writer = hound::WavWriter::create(wav_filename, spec).unwrap();
+  // let mut writer_u16 = writer.get_i16_writer(wav.len() as u32);
+  // for w in wav {
+  //   writer_u16.write_sample(w);
+  // }
+  // writer_u16.flush()?;
 
-  Ok(num_errors)
-}
-
-///
-/// Read the frame header to the ByteReader output.
-///
-fn read_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error> {
-  // Move to the beginning of the next frame, this is helpful when we are reading the middle of
-  // a stream.
-  decoder::move_to_next_frame(bytes)?;
-
-  let buf = &mut [0u8; x3::FrameHeader::HEADER_CRC_BYTE];
-  bytes.read(buf)?;
-
-  let sample_rate = 48000; // FIXME: Need to set this somehow else
-
-  let params = x3::Parameters::default();
-
-  Ok((sample_rate as u32, params))
-}
-
-///
-/// Read <Archive Header> to the BitReader output.
-///
-fn read_archive_header(bytes: &mut ByteReader) -> Result<(u32, x3::Parameters), X3Error> {
-  // <Archive Id>
-  if !bytes.eq(x3::Archive::ID) {
-    return Err(X3Error::ArchiveHeaderXMLInvalidKey);
-  }
-  bytes.inc_counter(x3::Archive::ID.len())?;
-
-  // <XML MetaData>
-  let (_, payload_size) = decoder::read_frame_header(bytes)?;
-
-  // Get the payload
-  let mut payload: Vec<u8> = vec![0; payload_size];
-  bytes.read(&mut payload)?;
-
-  let xml = String::from_utf8_lossy(&payload);
-
-  let (sample_rate, params) = parse_xml(&xml)?;
-
-  Ok((sample_rate, params))
+  // Ok(num_errors)
+  todo!()
 }
 
 ///
@@ -251,15 +342,15 @@ fn parse_xml(xml: &str) -> Result<(u32, x3::Parameters), X3Error> {
 
 #[cfg(test)]
 mod tests {
-//   use crate::decodefile::{x3a_to_wav, x3bin_to_wav};
+  //   use crate::decodefile::{x3a_to_wav, x3bin_to_wav};
 
-//   #[test]
-//   fn test_decode_bin_file() {
-//     x3bin_to_wav("~/tmp/test.bin", "~/tmp/test.linux.wav").unwrap();
-//   }
+  //   #[test]
+  //   fn test_decode_bin_file() {
+  //     x3bin_to_wav("~/tmp/test.bin", "~/tmp/test.linux.wav").unwrap();
+  //   }
 
-//   #[test]
-//   fn test_decode_x3a_file() {
-//     x3a_to_wav("~/tmp/test.x3a", "~/tmp/test.wav").unwrap();
-//   }
+  //   #[test]
+  //   fn test_decode_x3a_file() {
+  //     x3a_to_wav("~/tmp/test.x3a", "~/tmp/test.wav").unwrap();
+  //   }
 }

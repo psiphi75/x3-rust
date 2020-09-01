@@ -20,10 +20,14 @@
  **************************************************************************/
 
 use crate::bitpack::{BitPackError, BitReader, ByteReader};
+use crate::crc;
 use crate::error;
 use crate::x3;
 
+use byteorder::{BigEndian, ByteOrder};
 use error::X3Error;
+// use std::io::BufReader;
+use crate::x3::FrameHeader;
 
 // Compression won't be more than 10x
 fn estimate_total_length(num_bytes: usize) -> usize {
@@ -43,7 +47,7 @@ pub fn move_to_next_frame(bytes: &mut ByteReader) -> Result<(), X3Error> {
       FrameTest::EndOfBuffer => return Err(X3Error::FrameDecodeUnexpectedEnd),
       FrameTest::NotFrame => {
         bytes.inc_counter(1)?;
-        bytes.find_le_u16(x3::FrameHeader::KEY);
+        bytes.find_le_u16(FrameHeader::KEY);
       }
     }
   }
@@ -61,14 +65,14 @@ pub fn move_to_next_frame(bytes: &mut ByteReader) -> Result<(), X3Error> {
 ///
 /// * (bytes, errors) - The bytes read and the number of encoding errors encountered
 ///
-pub fn decode_frames(bytes: &mut ByteReader, params: &x3::Parameters) -> Result<(Vec<i16>, usize), X3Error> {
+pub fn decode_frames(bytes: &mut ByteReader, params: &x3::Parameters) -> Result<Option<(Vec<i16>, usize)>, X3Error> {
   let estimated_length = estimate_total_length(bytes.remaining_bytes()?);
 
   let mut wav: Vec<i16> = vec![0; estimated_length];
   let mut p_wav = 0; // the pointer to keep a track of `wav` writes
   let mut total_samples_written = 0;
   let mut errors = 0;
-  while bytes.remaining_bytes()? > x3::FrameHeader::LENGTH {
+  while bytes.remaining_bytes()? > FrameHeader::LENGTH {
     let mut samples_written = 0;
     match decode_frame(bytes, &mut wav, &params, &mut p_wav, &mut samples_written) {
       Ok(()) => {}
@@ -92,8 +96,42 @@ pub fn decode_frames(bytes: &mut ByteReader, params: &x3::Parameters) -> Result<
   // Resize to the length of uncompressed bytes
   wav.resize(total_samples_written, 0);
 
-  Ok((wav, errors))
+  Ok(Some((wav, errors)))
 }
+
+// pub fn decode_frames_NEW(bytes: &mut X3aReader, params: &x3::Parameters) -> Result<Option<(Vec<i16>, usize)>, X3Error> {
+//   let estimated_length = estimate_total_length(bytes.remaining_bytes()?);
+
+//   let mut wav: Vec<i16> = vec![0; estimated_length];
+//   let mut p_wav = 0; // the pointer to keep a track of `wav` writes
+//   let mut total_samples_written = 0;
+//   let mut errors = 0;
+//   while bytes.remaining_bytes()? > FrameHeader::LENGTH {
+//     let mut samples_written = 0;
+//     match decode_frame(bytes, &mut wav, &params, &mut p_wav, &mut samples_written) {
+//       Ok(()) => {}
+//       Err(X3Error::FrameHeaderInvalidPayloadLen) => eprintln!("The final frame was not complete"),
+//       Err(err) => {
+//         errors += 1;
+//         println!("ERROR occurred: {:?}", err);
+//         match move_to_next_frame(bytes) {
+//           Ok(()) => (),
+//           Err(_) => {
+//             // this is okay, since we only hit the end of the array
+//             errors += 1;
+//             eprintln!("An error occurred decoding a frame");
+//           }
+//         }
+//       }
+//     };
+//     total_samples_written += samples_written;
+//   }
+
+//   // Resize to the length of uncompressed bytes
+//   wav.resize(total_samples_written, 0);
+
+//   Ok(Some((wav, errors)))
+// }
 
 ///
 /// Decode an individual frame.
@@ -140,6 +178,39 @@ pub fn decode_frame(
   Ok(())
 }
 
+pub fn decode_frame_NEW(
+  bytes: &mut ByteReader,
+  wav: &mut [i16],
+  params: &x3::Parameters,
+  p_wav: &mut usize,
+  samples_written: &mut usize,
+  samples: usize,
+) -> Result<(), X3Error> {
+  let mut last_wav = bytes.read_be_i16()?;
+
+  wav[*p_wav] = last_wav as i16;
+  *p_wav += 1;
+  *samples_written += 1;
+
+  let br_payload_len = bytes.remaining_bytes()?;
+  let mut buf = &mut vec![0; br_payload_len];
+  let bytes_written = bytes.read(&mut buf)?;
+  let br = &mut BitReader::new(&mut buf[..bytes_written]);
+
+  let mut remaining_samples = samples - 1;
+
+  while remaining_samples > 0 {
+    let block_len = core::cmp::min(remaining_samples, params.block_len);
+    let block_len = decode_block(br, &mut wav[*p_wav..(*p_wav + block_len)], &mut last_wav, &params)?;
+
+    *samples_written += block_len;
+    remaining_samples -= block_len;
+    *p_wav += block_len;
+  }
+
+  Ok(())
+}
+
 ///
 /// Check if `bytes` are currently pointing to a valid frame.  It checks the
 /// header and the CRC packets.  It also looks for the next frame.
@@ -166,13 +237,64 @@ pub fn is_valid_frame(bytes: &mut ByteReader) -> FrameTest {
 ///
 /// * `br` - the data to decode as a BitReader.
 ///
+pub fn read_frame_header_NEW(bytes: &[u8]) -> Result<FrameHeader, X3Error> {
+  if bytes.len() < FrameHeader::LENGTH {
+    return Err(X3Error::FrameDecodeUnexpectedEnd);
+  }
+  // Calc header CRC
+  let header_crc = crc::crc16(&bytes[0..FrameHeader::P_HEADER_CRC]);
+  let expected_header_crc = BigEndian::read_u16(&bytes[FrameHeader::P_HEADER_CRC..]);
+  if expected_header_crc != header_crc {
+    return Err(X3Error::FrameHeaderInvalidHeaderCRC);
+  }
+
+  // Read <Frame Key>
+  let x3_archive_key = BigEndian::read_u16(&bytes[0..2]);
+  if x3_archive_key != FrameHeader::KEY {
+    return Err(X3Error::FrameHeaderInvalidKey);
+  }
+
+  // <Source Id>
+  // Currently just skip it
+  let source_id = bytes[FrameHeader::P_SOURCE_ID];
+
+  // <Num Channels>
+  let channels = bytes[FrameHeader::P_CHANNELS];
+  if channels > 1 {
+    return Err(X3Error::MoreThanOneChannel);
+  }
+
+  // <Num Samples>
+  let samples = BigEndian::read_u16(&bytes[FrameHeader::P_SAMPLES..]);
+
+  // <Payload Length>
+  let payload_len = BigEndian::read_u16(&bytes[FrameHeader::P_PAYLOAD_SIZE..]) as usize;
+  if payload_len >= x3::Frame::MAX_LENGTH {
+    return Err(X3Error::FrameLength);
+  }
+
+  // <Time>
+  // Skip time
+
+  // <Payload CRC>
+  let payload_crc = BigEndian::read_u16(&bytes[FrameHeader::P_PAYLOAD_CRC..]);
+
+  Ok(FrameHeader {
+    source_id,
+    samples,
+    channels,
+    payload_len,
+    payload_crc,
+  })
+}
+
 pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Error> {
   if bytes.remaining_bytes()? < x3::FrameHeader::LENGTH {
     return Err(X3Error::FrameDecodeUnexpectedEnd);
   }
 
   // Calc header CRC
-  let expected_header_crc = bytes.crc16(x3::FrameHeader::HEADER_CRC_BYTE)?;
+  let expected_header_crc = bytes.crc16(x3::FrameHeader::P_HEADER_CRC)?;
 
   // Read <Frame Key>
   if !bytes.eq(x3::FrameHeader::KEY_BUF) {
@@ -221,7 +343,6 @@ pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Err
 
   Ok((num_samples, payload_len))
 }
-
 
 ///
 /// Decode a block of compressed x3 data.  This function will determine weather to
@@ -440,5 +561,4 @@ mod tests {
 
     assert_eq!(expected_wavput, &mut wav[0..expected_wavput.len()]);
   }
-
 }

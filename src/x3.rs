@@ -44,6 +44,16 @@ impl<'a> Channel<'a> {
   }
 }
 
+pub struct X3aSpec {
+  /// The number of samples per second.
+  pub sample_rate: u32,
+
+  /// The parameters for the stream
+  pub params: Parameters,
+
+  /// The number of channels in use
+  pub channels: u8,
+}
 pub struct Parameters {
   pub block_len: usize,
   pub blocks_per_frame: usize,
@@ -109,7 +119,22 @@ impl Frame {
   pub const MAX_LENGTH: usize = 0x7fe0;
 }
 
-pub struct FrameHeader {}
+pub struct FrameHeader {
+  /// Source Id of the stream
+  pub source_id: u8,
+
+  /// The number of samples in the frame
+  pub samples: u16,
+
+  /// The number of channels
+  pub channels: u8,
+
+  /// The length of the frame (bytes)
+  pub payload_len: usize,
+
+  /// The CRC16 value for the payload
+  pub payload_crc: u16,
+}
 
 impl FrameHeader {
   /// The length of the header
@@ -119,11 +144,17 @@ impl FrameHeader {
   pub const KEY: u16 = 30771; // "x3"
   pub const KEY_BUF: &'static [u8] = &[0x78, 0x33]; // "x3"
 
-  /// The location of various bytes in the payload
-  pub const SAMPLE_RATE_BYTE: usize = 0;
+  /// The location of various bytes in the header
+  pub const P_KEY: usize = 0;
+  pub const P_SOURCE_ID: usize = 2;
+  pub const P_CHANNELS: usize = 3;
+  pub const P_SAMPLES: usize = 4;
+  pub const P_PAYLOAD_SIZE: usize = 6;
+  pub const P_TIME: usize = 8;
 
   /// CRC of the encoded payload, all the frames
-  pub const HEADER_CRC_BYTE: usize = 16;
+  pub const P_HEADER_CRC: usize = 16;
+  pub const P_PAYLOAD_CRC: usize = 18;
 }
 
 #[allow(dead_code)]

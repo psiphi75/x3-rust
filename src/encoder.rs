@@ -117,7 +117,7 @@ pub fn write_frame_header(bp: &mut BitPacker, num_samples: usize, id: u8) -> Res
   p += 8;
 
   // <Header CRC> = CRC of the frame header
-  let header_crc = crc16(&header[0..x3::FrameHeader::HEADER_CRC_BYTE]);
+  let header_crc = crc16(&header[0..x3::FrameHeader::P_HEADER_CRC]);
   BigEndian::write_u16(&mut header[p..], header_crc as u16);
   p += 2;
 
@@ -661,5 +661,4 @@ mod tests {
     // Get the bytes
     let _x3_bytes = bp.as_bytes().unwrap();
   }
-
 }

@@ -47,7 +47,8 @@ fn get_filetype(filename: &str) -> AudioFiles {
   );
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
   let matches = App::new("x3")
     .version("0.1.0")
     .author("Simon Werner <simonwerner@gmail.com>")
@@ -83,8 +84,8 @@ fn main() {
   }
 
   match in_type {
-    AudioFiles::Wav => x3::encodefile::wav_to_x3a(in_file, out_file).unwrap(),
-    AudioFiles::X3a => x3::decodefile::x3a_to_wav(in_file, out_file).unwrap(),
+    AudioFiles::Wav => (), //FIXME: x3::encodefile::wav_to_x3a(in_file, out_file).await.unwrap(),
+    AudioFiles::X3a => x3::decodefile::x3a_to_wav(in_file, out_file).await.unwrap(),
     AudioFiles::X3Bin => {
       assert!(out_type == AudioFiles::Wav);
       x3::decodefile::x3bin_to_wav(in_file, out_file).unwrap();

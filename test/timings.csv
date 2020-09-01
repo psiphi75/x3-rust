@@ -1,0 +1,82 @@
+in file,test,in file size (bytes),test params,time,max mem usage (kB),out file size (bytes)
+01-Mascalito-Rhythmical_Disorder.wav,wav_to_x3a,38243566,,0.49,67952,28773934
+01-Saluberrimae-Trapped_Inside.wav,wav_to_x3a,28929646,,0.40,52828,22344256
+03-Mascalito-Filthy_Summer.wav,wav_to_x3a,41855474,,0.52,72848,30012254
+03-Saluberrimae-Jennifer_Connelly.wav,wav_to_x3a,46710766,,0.58,81700,34294846
+04-Saluberrimae-Time_Is_A_Flat_Circle.wav,wav_to_x3a,38666926,,0.49,67756,28064162
+EH120.wav,wav_to_x3a,72000044,,0.91,91956,19613060
+GI16.wav,wav_to_x3a,9600044,,0.12,15148,3184374
+GI60.wav,wav_to_x3a,36000044,,0.43,49804,12391742
+GR48.wav,wav_to_x3a,28800044,,0.35,39276,8589252
+LI192.wav,wav_to_x3a,115200042,,1.44,148920,34532616
+NO96.wav,wav_to_x3a,57600044,,0.70,72568,14304970
+PI240.wav,wav_to_x3a,144000044,,1.59,163152,20340626
+pts-trondheim-3.wav,wav_to_x3a,40952044,,0.53,74300,32394872
+STstreamTest.bin.wav,wav_to_x3a,970892,,0.01,3612,178930
+
+Usage:
+  bench.sh DIRECTORY ALGORITHM
+
+Where:
+  DIRECTORY is the directory with the source files
+  ALGORITHM is the algorithm to test, one of: wav_to_x3a, x3a_to_wav, wav_to_flac, flac_to_wav
+in file,test,in file size (bytes),test params,time,max mem usage (kB),out file size (bytes)
+01-Mascalito-Rhythmical_Disorder.x3a,x3a_to_wav,28773934,,0.64,68152,38243566
+01-Saluberrimae-Trapped_Inside.x3a,x3a_to_wav,22344256,,0.48,52796,28929646
+03-Mascalito-Filthy_Summer.x3a,x3a_to_wav,30012254,,0.69,72884,41855474
+03-Saluberrimae-Jennifer_Connelly.x3a,x3a_to_wav,34294846,,0.77,81696,46710766
+04-Saluberrimae-Time_Is_A_Flat_Circle.x3a,x3a_to_wav,28064162,,0.63,67748,38666926
+EH120.x3a,x3a_to_wav,19613060,,1.38,91964,72000044
+GI16.x3a,x3a_to_wav,3184374,,0.17,15188,9600044
+GI60.x3a,x3a_to_wav,12391742,,0.63,50184,36000044
+GR48.x3a,x3a_to_wav,8589252,,0.52,39200,28800044
+LI192.x3a,x3a_to_wav,34532616,,2.16,148912,115200042
+NO96.x3a,x3a_to_wav,14304970,,1.07,72632,57600044
+PI240.x3a,x3a_to_wav,20340626,,2.41,162996,144000044
+pts-trondheim-3.x3a,x3a_to_wav,32394872,,0.70,74272,40952044
+STstreamTest.bin.x3a,x3a_to_wav,178930,,0.01,3676,970892
+in file,test,in file size (bytes),test params,time,max mem usage (kB),out file size (bytes)
+01-Mascalito-Rhythmical_Disorder.x3a,x3a_to_wav,28773934,,0.64,68104,38243566
+01-Saluberrimae-Trapped_Inside.x3a,x3a_to_wav,22344256,,0.48,52724,28929646
+03-Mascalito-Filthy_Summer.x3a,x3a_to_wav,30012254,,0.69,72676,41855474
+03-Saluberrimae-Jennifer_Connelly.x3a,x3a_to_wav,34294846,,0.77,81668,46710766
+04-Saluberrimae-Time_Is_A_Flat_Circle.x3a,x3a_to_wav,28064162,,0.63,67772,38666926
+EH120.x3a,x3a_to_wav,19613060,,1.38,91964,72000044
+GI16.x3a,x3a_to_wav,3184374,,0.17,15276,9600044
+GI60.x3a,x3a_to_wav,12391742,,0.62,50128,36000044
+GR48.x3a,x3a_to_wav,8589252,,0.53,39368,28800044
+LI192.x3a,x3a_to_wav,34532616,,2.17,148952,115200042
+NO96.x3a,x3a_to_wav,14304970,,1.06,72724,57600044
+PI240.x3a,x3a_to_wav,20340626,,2.44,163096,144000044
+pts-trondheim-3.x3a,x3a_to_wav,32394872,,0.70,74308,40952044
+STstreamTest.bin.x3a,x3a_to_wav,178930,,0.01,3684,970892
+in file,test,in file size (bytes),test params,time,max mem usage (kB),out file size (bytes)
+01-Mascalito-Rhythmical_Disorder.x3a,x3a_to_wav,28773934,,0.64,67908,38243566
+01-Saluberrimae-Trapped_Inside.x3a,x3a_to_wav,22344256,,0.49,52632,28929646
+03-Mascalito-Filthy_Summer.x3a,x3a_to_wav,30012254,,0.69,72756,41855474
+03-Saluberrimae-Jennifer_Connelly.x3a,x3a_to_wav,34294846,,0.77,81696,46710766
+04-Saluberrimae-Time_Is_A_Flat_Circle.x3a,x3a_to_wav,28064162,,0.63,67664,38666926
+EH120.x3a,x3a_to_wav,19613060,,1.38,91956,72000044
+GI16.x3a,x3a_to_wav,3184374,,0.17,14968,9600044
+GI60.x3a,x3a_to_wav,12391742,,0.63,50092,36000044
+GR48.x3a,x3a_to_wav,8589252,,0.51,39204,28800044
+LI192.x3a,x3a_to_wav,34532616,,2.14,148784,115200042
+NO96.x3a,x3a_to_wav,14304970,,1.06,73036,57600044
+PI240.x3a,x3a_to_wav,20340626,,2.42,162960,144000044
+pts-trondheim-3.x3a,x3a_to_wav,32394872,,0.69,74368,40952044
+STstreamTest.bin.x3a,x3a_to_wav,178930,,0.02,3728,970892
+in file,test,in file size (bytes),test params,time,max mem usage (kB),out file size (bytes)
+01-Mascalito-Rhythmical_Disorder.wav,wav_to_x3a,38243566,,0.49,68016,28773934
+01-Saluberrimae-Trapped_Inside.wav,wav_to_x3a,28929646,,0.37,52656,22344256
+03-Mascalito-Filthy_Summer.wav,wav_to_x3a,41855474,,0.52,72760,30012254
+03-Saluberrimae-Jennifer_Connelly.wav,wav_to_x3a,46710766,,0.58,81656,34294846
+04-Saluberrimae-Time_Is_A_Flat_Circle.wav,wav_to_x3a,38666926,,0.48,67656,28064162
+EH120.wav,wav_to_x3a,72000044,,0.90,91988,19613060
+GI16.wav,wav_to_x3a,9600044,,0.12,15272,3184374
+GI60.wav,wav_to_x3a,36000044,,0.43,49840,12391742
+GR48.wav,wav_to_x3a,28800044,,0.35,38860,8589252
+LI192.wav,wav_to_x3a,115200042,,1.45,148844,34532616
+NO96.wav,wav_to_x3a,57600044,,0.70,72772,14304970
+PI240.wav,wav_to_x3a,144000044,,1.62,163080,20340626
+pts-trondheim-3.wav,wav_to_x3a,40952044,,0.60,74344,32394872
+STstreamTest.bin.wav,wav_to_x3a,970892,,0.01,3620,178930

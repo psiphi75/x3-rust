@@ -40,7 +40,7 @@ use error::X3Error;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
-pub const X3_READ_BUFFER_SIZE: usize = 1024 * 16;
+pub const X3_READ_BUFFER_SIZE: usize = 1024 * 24;
 pub const X3_WRITE_BUFFER_SIZE: usize = X3_READ_BUFFER_SIZE * 8; // TODO: Need to make sure we
 
 pub struct X3aReader {
@@ -76,9 +76,12 @@ impl X3aReader {
     &self.spec
   }
 
-  async fn read_bytes(&mut self, buf_len: usize) -> Result<usize, X3Error> {
-    let result = self.reader.read_exact(&mut self.read_buf[0..buf_len]).await?;
+  async fn read_bytes(&mut self, mut buf_len: usize) -> Result<usize, X3Error> {
+    if self.remaing_bytes < buf_len {
+      buf_len = self.remaing_bytes;
+    }
     self.remaing_bytes -= buf_len;
+    let result = self.reader.read_exact(&mut self.read_buf[0..buf_len]).await?;
     Ok(result)
   }
 
@@ -99,7 +102,10 @@ impl X3aReader {
     Ok(())
   }
 
-  pub async fn decode_next_frame(&mut self, wav: &mut [i16; X3_WRITE_BUFFER_SIZE]) -> Result<Option<usize>, X3Error> {
+  pub async fn decode_next_frame(
+    &mut self,
+    wav_buf: &mut [i16; X3_WRITE_BUFFER_SIZE],
+  ) -> Result<Option<usize>, X3Error> {
     // We have reached the end of the file
     if self.remaing_bytes <= x3::FrameHeader::LENGTH {
       return Ok(None);
@@ -108,17 +114,21 @@ impl X3aReader {
     // Get the header details
     let frame_header = self.read_frame_header().await?;
     let samples = frame_header.samples as usize;
+    if self.remaing_bytes < frame_header.payload_len {
+      return Ok(None);
+    }
+
+    if frame_header.payload_len > X3_READ_BUFFER_SIZE {
+      panic!("Payload is large than the available buffer size");
+    }
 
     // Get the Payload
     self.read_frame_payload(&frame_header).await?;
-    let frame_payload = &self.read_buf[0..frame_header.payload_len];
-    let bytes = &mut ByteReader::new(frame_payload);
+    let x3_bytes = &mut self.read_buf[0..frame_header.payload_len];
 
     // Do the decoding
-    let mut p_wav = 0; // the pointer to keep a track of `wav` writes
-    let mut samples_written = 0;
-    match decoder::decode_frame_NEW(bytes, wav, &self.spec.params, &mut p_wav, &mut samples_written, samples) {
-      Ok(()) => Ok(Some(samples_written)),
+    match decoder::decode_frame_NEW(x3_bytes, wav_buf, &self.spec.params, samples) {
+      Ok(result) => Ok(result),
       Err(err) => {
         self.errors += 1;
         println!("ERROR occurred: {:?}", err);

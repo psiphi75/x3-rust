@@ -179,36 +179,27 @@ pub fn decode_frame(
 }
 
 pub fn decode_frame_NEW(
-  bytes: &mut ByteReader,
-  wav: &mut [i16],
+  x3_bytes: &mut [u8],
+  wav_buf: &mut [i16],
   params: &x3::Parameters,
-  p_wav: &mut usize,
-  samples_written: &mut usize,
   samples: usize,
-) -> Result<(), X3Error> {
-  let mut last_wav = bytes.read_be_i16()?;
-
-  wav[*p_wav] = last_wav as i16;
-  *p_wav += 1;
-  *samples_written += 1;
-
-  let br_payload_len = bytes.remaining_bytes()?;
-  let mut buf = &mut vec![0; br_payload_len];
-  let bytes_written = bytes.read(&mut buf)?;
-  let br = &mut BitReader::new(&mut buf[..bytes_written]);
-
+) -> Result<Option<usize>, X3Error> {
+  let mut last_wav = BigEndian::read_i16(x3_bytes);
+  let mut p_wav = 0;
+  wav_buf[p_wav] = last_wav as i16;
+  p_wav += 1;
+  let br = &mut BitReader::new(&mut x3_bytes[2..]);
   let mut remaining_samples = samples - 1;
 
   while remaining_samples > 0 {
     let block_len = core::cmp::min(remaining_samples, params.block_len);
-    let block_len = decode_block(br, &mut wav[*p_wav..(*p_wav + block_len)], &mut last_wav, &params)?;
+    let block_len = decode_block(br, &mut wav_buf[p_wav..(p_wav + block_len)], &mut last_wav, &params)?;
 
-    *samples_written += block_len;
     remaining_samples -= block_len;
-    *p_wav += block_len;
+    p_wav += block_len;
   }
 
-  Ok(())
+  Ok(Some(p_wav))
 }
 
 ///

@@ -22,6 +22,8 @@
 // std
 // use std::fs::File;
 // use std::io::{prelude::*, BufReader};
+// use chrono::DateTime;
+use chrono::prelude::*;
 use std::path;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, BufReader};
@@ -30,7 +32,6 @@ use tokio::io::{AsyncReadExt, BufReader};
 use crate::hound;
 
 // this crate
-use crate::bitpack::ByteReader;
 use crate::decoder;
 use crate::error;
 use crate::{crc, x3};
@@ -105,6 +106,7 @@ impl X3aReader {
   pub async fn decode_next_frame(
     &mut self,
     wav_buf: &mut [i16; X3_WRITE_BUFFER_SIZE],
+    time: &mut i64,
   ) -> Result<Option<usize>, X3Error> {
     // We have reached the end of the file
     if self.remaing_bytes <= x3::FrameHeader::LENGTH {
@@ -125,6 +127,7 @@ impl X3aReader {
     // Get the Payload
     self.read_frame_payload(&frame_header).await?;
     let x3_bytes = &mut self.read_buf[0..frame_header.payload_len];
+    *time = Utc::now().timestamp_nanos();
 
     // Do the decoding
     match decoder::decode_frame_NEW(x3_bytes, wav_buf, &self.spec.params, samples) {
@@ -203,9 +206,18 @@ pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) 
 
   let mut writer = hound::WavWriter::create(wav_filename, spec)?;
   let mut wav = [0i16; X3_WRITE_BUFFER_SIZE];
+  let mut times = vec![0i64; 1_000_000];
+  let mut t = 0;
   loop {
-    match x3a_reader.decode_next_frame(&mut wav).await? {
+    times[t] = Utc::now().timestamp_nanos();
+    t += 1;
+    let mut time = 0;
+    match x3a_reader.decode_next_frame(&mut wav, &mut time).await? {
       Some(samples) => {
+        times[t] = time;
+        t += 1;
+        times[t] = Utc::now().timestamp_nanos();
+        t += 1;
         for i in 0..samples {
           writer.write_sample(wav[i])?;
         }
@@ -213,7 +225,19 @@ pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) 
       None => break,
     }
   }
+  times[t] = Utc::now().timestamp_nanos();
   writer.flush()?;
+  times[t] = Utc::now().timestamp_nanos();
+  t += 1;
+
+  t = 0;
+  loop {
+    println!("{},{},{}", times[t], times[t + 1], times[t + 2]);
+    t += 3;
+    if times[t] == 0 {
+      break;
+    }
+  }
   Ok(())
 }
 

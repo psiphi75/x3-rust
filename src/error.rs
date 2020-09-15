@@ -29,7 +29,6 @@ pub enum X3Error {
 
   // Custom X3 Errors
   InvalidEncodingThresh, // Threshold must be less than or equal to code.offset
-  InvalidArrayLen,       // Array lengths are not compatible.
   OutOfBoundsInverse,    // The value is out-of-bounds for the .inv array.
   MoreThanOneChannel,    // FIXME: We need to support more than one channel
 
@@ -51,6 +50,7 @@ pub enum X3Error {
   FrameDecodeInvalidBlockLength, // The block length is bad
   FrameDecodeInvalidIndex,       // Invalid rice code encountered, index out of range
   FrameDecodeInvalidNTOGO,       // Invalid ntogo
+  FrameDecodeInvalidFType,       // Invalid ftype
   FrameDecodeInvalidRiceCode,    // The Rice codes are invalid
   FrameDecodeInvalidBPF,         // The BPF decoder blew up, an invalid value was reached.
   FrameDecodeUnexpectedEnd,      // The BitReader has less bytes than the size of the header, but still expects a frame.

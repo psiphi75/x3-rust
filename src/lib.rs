@@ -23,6 +23,7 @@ extern crate byteorder;
 extern crate hound;
 
 pub mod bitpack;
+pub mod bitreader;
 pub mod crc;
 pub mod decodefile;
 pub mod decoder;

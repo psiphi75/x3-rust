@@ -19,20 +19,13 @@
  *                                                                        *
  **************************************************************************/
 
-use crate::bitpack::{BitPackError, BitReader, ByteReader};
+use crate::bitreader::BitReader;
 use crate::crc;
 use crate::error;
-use crate::x3;
+use crate::x3::{self, FrameHeader};
 
 use byteorder::{BigEndian, ByteOrder};
 use error::X3Error;
-// use std::io::BufReader;
-use crate::x3::FrameHeader;
-
-// Compression won't be more than 10x
-fn estimate_total_length(num_bytes: usize) -> usize {
-  num_bytes * 10
-}
 
 pub enum FrameTest {
   IsFrame,
@@ -40,145 +33,7 @@ pub enum FrameTest {
   NotFrame,
 }
 
-pub fn move_to_next_frame(bytes: &mut ByteReader) -> Result<(), X3Error> {
-  loop {
-    match is_valid_frame(bytes) {
-      FrameTest::IsFrame => return Ok(()),
-      FrameTest::EndOfBuffer => return Err(X3Error::FrameDecodeUnexpectedEnd),
-      FrameTest::NotFrame => {
-        bytes.inc_counter(1)?;
-        bytes.find_le_u16(FrameHeader::KEY);
-      }
-    }
-  }
-}
-
-///
-/// Decode all available frames found in `bytes`.
-///
-/// ### Arguments
-///
-/// * `bytes` - the data to decode as a ByteReader.
-/// * `params` - the audio properties.
-///
-/// ### Returns
-///
-/// * (bytes, errors) - The bytes read and the number of encoding errors encountered
-///
-pub fn decode_frames(bytes: &mut ByteReader, params: &x3::Parameters) -> Result<Option<(Vec<i16>, usize)>, X3Error> {
-  let estimated_length = estimate_total_length(bytes.remaining_bytes()?);
-
-  let mut wav: Vec<i16> = vec![0; estimated_length];
-  let mut p_wav = 0; // the pointer to keep a track of `wav` writes
-  let mut total_samples_written = 0;
-  let mut errors = 0;
-  while bytes.remaining_bytes()? > FrameHeader::LENGTH {
-    let mut samples_written = 0;
-    match decode_frame(bytes, &mut wav, &params, &mut p_wav, &mut samples_written) {
-      Ok(()) => {}
-      Err(X3Error::FrameHeaderInvalidPayloadLen) => eprintln!("The final frame was not complete"),
-      Err(err) => {
-        errors += 1;
-        println!("ERROR occurred: {:?}", err);
-        match move_to_next_frame(bytes) {
-          Ok(()) => (),
-          Err(_) => {
-            // this is okay, since we only hit the end of the array
-            errors += 1;
-            eprintln!("An error occurred decoding a frame");
-          }
-        }
-      }
-    };
-    total_samples_written += samples_written;
-  }
-
-  // Resize to the length of uncompressed bytes
-  wav.resize(total_samples_written, 0);
-
-  Ok(Some((wav, errors)))
-}
-
-// pub fn decode_frames_NEW(bytes: &mut X3aReader, params: &x3::Parameters) -> Result<Option<(Vec<i16>, usize)>, X3Error> {
-//   let estimated_length = estimate_total_length(bytes.remaining_bytes()?);
-
-//   let mut wav: Vec<i16> = vec![0; estimated_length];
-//   let mut p_wav = 0; // the pointer to keep a track of `wav` writes
-//   let mut total_samples_written = 0;
-//   let mut errors = 0;
-//   while bytes.remaining_bytes()? > FrameHeader::LENGTH {
-//     let mut samples_written = 0;
-//     match decode_frame(bytes, &mut wav, &params, &mut p_wav, &mut samples_written) {
-//       Ok(()) => {}
-//       Err(X3Error::FrameHeaderInvalidPayloadLen) => eprintln!("The final frame was not complete"),
-//       Err(err) => {
-//         errors += 1;
-//         println!("ERROR occurred: {:?}", err);
-//         match move_to_next_frame(bytes) {
-//           Ok(()) => (),
-//           Err(_) => {
-//             // this is okay, since we only hit the end of the array
-//             errors += 1;
-//             eprintln!("An error occurred decoding a frame");
-//           }
-//         }
-//       }
-//     };
-//     total_samples_written += samples_written;
-//   }
-
-//   // Resize to the length of uncompressed bytes
-//   wav.resize(total_samples_written, 0);
-
-//   Ok(Some((wav, errors)))
-// }
-
-///
-/// Decode an individual frame.
-///
-/// ### Arguments
-///
-/// * `br` - the data to decode as a ByteReader.
-/// * `wav` - where the wav data will be written to.
-/// * `params` - the audio properties.
-/// * `p_wav` - the pointer to keep a track of `wav` writes.
-///
 pub fn decode_frame(
-  bytes: &mut ByteReader,
-  wav: &mut Vec<i16>,
-  params: &x3::Parameters,
-  p_wav: &mut usize,
-  samples_written: &mut usize,
-) -> Result<(), X3Error> {
-  // Get the frame header
-  let (ns, payload_size) = read_frame_header(bytes)?;
-
-  let mut last_wav = bytes.read_be_i16()?;
-
-  wav[*p_wav] = last_wav as i16;
-  *p_wav += 1;
-  *samples_written += 1;
-
-  let br_payload_size = payload_size - 2;
-  let mut buf = &mut vec![0; br_payload_size];
-  let bytes_written = bytes.read(&mut buf)?;
-  let br = &mut BitReader::new(&mut buf[..bytes_written]);
-
-  let mut remaining_samples = ns - 1;
-
-  while remaining_samples > 0 {
-    let block_len = core::cmp::min(remaining_samples, params.block_len);
-    let block_len = decode_block(br, &mut wav[*p_wav..(*p_wav + block_len)], &mut last_wav, &params)?;
-
-    *samples_written += block_len;
-    remaining_samples -= block_len;
-    *p_wav += block_len;
-  }
-
-  Ok(())
-}
-
-pub fn decode_frame_NEW(
   x3_bytes: &mut [u8],
   wav_buf: &mut [i16],
   params: &x3::Parameters,
@@ -193,30 +48,13 @@ pub fn decode_frame_NEW(
 
   while remaining_samples > 0 {
     let block_len = core::cmp::min(remaining_samples, params.block_len);
-    let block_len = decode_block(br, &mut wav_buf[p_wav..(p_wav + block_len)], &mut last_wav, &params)?;
+    decode_block(br, &mut wav_buf[p_wav..(p_wav + block_len)], &mut last_wav, &params)?;
 
     remaining_samples -= block_len;
     p_wav += block_len;
   }
 
   Ok(Some(p_wav))
-}
-
-///
-/// Check if `bytes` are currently pointing to a valid frame.  It checks the
-/// header and the CRC packets.  It also looks for the next frame.
-///
-pub fn is_valid_frame(bytes: &mut ByteReader) -> FrameTest {
-  let p_byte = bytes.get_pos();
-  let result = read_frame_header(bytes);
-  bytes.set_pos(p_byte);
-
-  match result {
-    Ok(_) => FrameTest::IsFrame,
-    Err(X3Error::BitPack(BitPackError::ArrayEndReached)) => FrameTest::EndOfBuffer,
-    Err(X3Error::FrameDecodeUnexpectedEnd) => FrameTest::EndOfBuffer,
-    Err(_) => FrameTest::NotFrame,
-  }
 }
 
 ///
@@ -228,7 +66,7 @@ pub fn is_valid_frame(bytes: &mut ByteReader) -> FrameTest {
 ///
 /// * `br` - the data to decode as a BitReader.
 ///
-pub fn read_frame_header_NEW(bytes: &[u8]) -> Result<FrameHeader, X3Error> {
+pub fn read_frame_header(bytes: &[u8]) -> Result<FrameHeader, X3Error> {
   if bytes.len() < FrameHeader::LENGTH {
     return Err(X3Error::FrameDecodeUnexpectedEnd);
   }
@@ -279,62 +117,6 @@ pub fn read_frame_header_NEW(bytes: &[u8]) -> Result<FrameHeader, X3Error> {
   })
 }
 
-pub fn read_frame_header(bytes: &mut ByteReader) -> Result<(usize, usize), X3Error> {
-  if bytes.remaining_bytes()? < x3::FrameHeader::LENGTH {
-    return Err(X3Error::FrameDecodeUnexpectedEnd);
-  }
-
-  // Calc header CRC
-  let expected_header_crc = bytes.crc16(x3::FrameHeader::P_HEADER_CRC)?;
-
-  // Read <Frame Key>
-  if !bytes.eq(x3::FrameHeader::KEY_BUF) {
-    return Err(X3Error::FrameHeaderInvalidKey);
-  }
-  bytes.inc_counter(x3::FrameHeader::KEY_BUF.len())?;
-
-  // <Source Id>
-  // Currently just skip it
-  bytes.inc_counter(1)?;
-
-  // <Num Channels>
-  let num_channels = bytes.read_u8()?;
-  if num_channels > 1 {
-    return Err(X3Error::MoreThanOneChannel);
-  }
-
-  // <Num Samples>
-  let num_samples = bytes.read_be_u16()? as usize;
-
-  // <Payload Length>
-  let payload_len = bytes.read_be_u16()? as usize;
-  if payload_len >= x3::Frame::MAX_LENGTH {
-    return Err(X3Error::FrameLength);
-  }
-
-  // <Time>
-  // Skip time
-  bytes.inc_counter(8)?;
-
-  // <Header CRC>
-  let header_crc = bytes.read_be_u16()?;
-  if expected_header_crc != header_crc {
-    return Err(X3Error::FrameHeaderInvalidHeaderCRC);
-  }
-
-  // <Payload CRC>
-  let payload_crc = bytes.read_be_u16()?;
-  if bytes.remaining_bytes()? < payload_len {
-    return Err(X3Error::FrameHeaderInvalidPayloadLen);
-  }
-  let expected_payload_crc = bytes.crc16(payload_len)?;
-  if expected_payload_crc != payload_crc {
-    return Err(X3Error::FrameHeaderInvalidPayloadCRC);
-  }
-
-  Ok((num_samples, payload_len))
-}
-
 ///
 /// Decode a block of compressed x3 data.  This function will determine weather to
 /// use the Rice Code method, or the BFP method.
@@ -352,46 +134,55 @@ pub fn decode_block(
   wav: &mut [i16],
   last_wav: &mut i16,
   params: &x3::Parameters,
-) -> Result<usize, X3Error> {
-  let ftype = br.read_nbits(2)? as usize;
-  if ftype == 0 {
-    decode_bpf_block(br, wav, last_wav)
-  } else {
-    decode_ricecode_block(br, wav, last_wav, params, ftype)
+) -> Result<(), X3Error> {
+  let ftype = br.read_nbits(2) as usize;
+  match ftype {
+    0 => decode_bpf_block(br, wav, last_wav),
+    1 => decode_ricecode_block_r1(br, wav, last_wav, params, ftype),
+    2 | 3 => decode_ricecode_block_r2r3(br, wav, last_wav, params, ftype),
+    _ => Err(X3Error::FrameDecodeInvalidFType),
   }
 }
 
-fn decode_ricecode_block(
+fn decode_ricecode_block_r1(
   br: &mut BitReader,
   wav: &mut [i16],
   last_wav: &mut i16,
   params: &x3::Parameters,
   ftype: usize,
-) -> Result<usize, X3Error> {
+) -> Result<(), X3Error> {
   let code = params.rice_codes[ftype - 1];
-  if ftype == 1 {
-    for wav_value in wav.iter_mut() {
-      let n = br.read_zero_bits()?;
-      br.read_nbits(1)?; // skip the next bit
-      *last_wav += code.inv[n]; // Table lookup to convert to a signed number
-      *wav_value = *last_wav;
-    }
-  } else if ftype == 2 || ftype == 3 {
-    let nb = if ftype == 2 { 2 } else { 4 };
-    let level = 1 << code.nsubs;
-    for wav_value in wav.iter_mut() {
-      let n = br.read_zero_bits()? as i16;
-      let r = br.read_nbits(nb)? as i16;
-      let i = r + level * (n - 1);
-      if i as usize >= code.inv_len {
-        return Err(X3Error::OutOfBoundsInverse);
-      }
-      let diff = code.inv[i as usize];
-      *last_wav += diff;
-      *wav_value = *last_wav;
-    }
+  for wav_value in wav.iter_mut() {
+    let n = br.count_zero_bits();
+    br.read_nbits(1); // skip the next bit
+    *last_wav += code.inv[n]; // Table lookup to convert to a signed number
+    *wav_value = *last_wav;
   }
-  Ok(wav.len())
+  Ok(())
+}
+
+fn decode_ricecode_block_r2r3(
+  br: &mut BitReader,
+  wav: &mut [i16],
+  last_wav: &mut i16,
+  params: &x3::Parameters,
+  ftype: usize,
+) -> Result<(), X3Error> {
+  let code = params.rice_codes[ftype - 1];
+  let nb = if ftype == 2 { 2 } else { 4 };
+  let level = 1 << code.nsubs;
+  for wav_value in wav.iter_mut() {
+    let n = br.count_zero_bits() as i16;
+    let r = br.read_nbits(nb) as i16;
+    let i = r + level * (n - 1);
+    if i as usize >= code.inv_len {
+      return Err(X3Error::OutOfBoundsInverse);
+    }
+    let diff = code.inv[i as usize];
+    *last_wav += diff;
+    *wav_value = *last_wav;
+  }
+  Ok(())
 }
 
 fn unsigned_to_i16(a: u16, num_bits: usize) -> i16 {
@@ -405,9 +196,9 @@ fn unsigned_to_i16(a: u16, num_bits: usize) -> i16 {
   a as i16
 }
 
-fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> Result<usize, X3Error> {
+fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> Result<(), X3Error> {
   // This is a BFP or pass-through block
-  let num_bits = (br.read_nbits(4)? + 1) as usize; // Read the rest of the block header
+  let num_bits = (br.read_nbits(4) + 1) as usize; // Read the rest of the block header
 
   if num_bits <= 5 {
     // We can't have BPF with length 5 or less.
@@ -417,20 +208,20 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> 
   if num_bits == 16 {
     // This is a pass-through block
     for wav_value in wav.iter_mut() {
-      *wav_value = br.read_nbits(16)? as i16;
+      *wav_value = br.read_nbits(16) as i16;
     }
   } else {
     // Otherwise, this is a BFP-encoded block with E + 1 bits/word
     let mut value = *last_wav;
     for wav_value in wav.iter_mut() {
-      let diff = br.read_nbits(num_bits)?;
+      let diff = br.read_nbits(num_bits) as u16;
       value += unsigned_to_i16(diff, num_bits);
       *wav_value = value as i16;
     }
   }
   *last_wav = wav[wav.len() - 1];
 
-  Ok(wav.len())
+  Ok(())
 }
 
 //
@@ -447,7 +238,7 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> 
 
 #[cfg(test)]
 mod tests {
-  use crate::bitpack::BitReader;
+  use crate::bitreader::BitReader;
   use crate::byteorder::{BigEndian, ByteOrder};
   use crate::decoder::decode_block;
   use crate::x3;
@@ -467,7 +258,7 @@ mod tests {
     let params = &x3::Parameters::default();
 
     // Skip 6 bits
-    br.read_nbits(6).unwrap();
+    br.read_nbits(6);
 
     decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 

@@ -26,9 +26,8 @@ use clap::{App, Arg};
 
 #[derive(PartialEq, Eq)]
 enum AudioFiles {
-  X3a,   // .x3a
-  Wav,   // .wav
-  X3Bin, // .bin
+  X3a, // .x3a
+  Wav, // .wav
 }
 
 fn get_filetype(filename: &str) -> AudioFiles {
@@ -38,19 +37,13 @@ fn get_filetype(filename: &str) -> AudioFiles {
   if filename.ends_with(".wav") {
     return AudioFiles::Wav;
   }
-  if filename.ends_with(".bin") {
-    return AudioFiles::X3Bin;
-  }
-  panic!(
-    "Invalid audio file, expecting a '.wav', '.bin' or '.x3a' file: {}",
-    filename
-  );
+  panic!("Invalid audio file, expecting a '.wav' or '.x3a' file: {}", filename);
 }
 
 #[tokio::main]
 async fn main() {
   let matches = App::new("x3")
-    .version("0.1.0")
+    .version("0.3.0")
     .author("Simon Werner <simonwerner@gmail.com>")
     .about("x3 - efficient lossless compression for low entropy audio wav files.")
     .arg(
@@ -84,11 +77,7 @@ async fn main() {
   }
 
   match in_type {
-    AudioFiles::Wav => (), //FIXME: x3::encodefile::wav_to_x3a(in_file, out_file).await.unwrap(),
+    AudioFiles::Wav => x3::encodefile::wav_to_x3a(in_file, out_file).unwrap(),
     AudioFiles::X3a => x3::decodefile::x3a_to_wav(in_file, out_file).await.unwrap(),
-    AudioFiles::X3Bin => {
-      assert!(out_type == AudioFiles::Wav);
-      x3::decodefile::x3bin_to_wav(in_file, out_file).unwrap();
-    }
   };
 }

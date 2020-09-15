@@ -88,7 +88,7 @@ impl X3aReader {
 
   async fn read_frame_header(&mut self) -> Result<FrameHeader, X3Error> {
     self.read_bytes(x3::FrameHeader::LENGTH).await?;
-    decoder::read_frame_header_NEW(&self.read_buf[0..x3::FrameHeader::LENGTH])
+    decoder::read_frame_header(&self.read_buf[0..x3::FrameHeader::LENGTH])
   }
 
   async fn read_frame_payload(&mut self, header: &FrameHeader) -> Result<(), X3Error> {
@@ -130,7 +130,7 @@ impl X3aReader {
     *time = Utc::now().timestamp_nanos();
 
     // Do the decoding
-    match decoder::decode_frame_NEW(x3_bytes, wav_buf, &self.spec.params, samples) {
+    match decoder::decode_frame(x3_bytes, wav_buf, &self.spec.params, samples) {
       Ok(result) => Ok(result),
       Err(err) => {
         self.errors += 1;
@@ -160,7 +160,7 @@ async fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, u
     let mut header_buf = [0u8; x3::FrameHeader::LENGTH];
     // read_bytes(&mut reader, &mut header_buf).await?;
     reader.read_exact(&mut header_buf).await?;
-    decoder::read_frame_header_NEW(&mut header_buf)?
+    decoder::read_frame_header(&mut header_buf)?
   };
 
   // Get the payload
@@ -228,9 +228,8 @@ pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) 
   times[t] = Utc::now().timestamp_nanos();
   writer.flush()?;
   times[t] = Utc::now().timestamp_nanos();
-  t += 1;
 
-  t = 0;
+  let mut t = 0;
   loop {
     println!("{},{},{}", times[t], times[t + 1], times[t + 2]);
     t += 3;
@@ -239,51 +238,6 @@ pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) 
     }
   }
   Ok(())
-}
-
-///
-/// Convert an .bin (x3 binary without archive details) file to a .wav file.  
-///
-/// ### Arguments
-///
-/// * `x3bin_filename` - the input x3 bin (.bin) file to decode.
-/// * `wav_filename` - the output wav file to write to.  It will be overwritten.
-///
-/// ### Returns
-///
-/// * errors - The number of encoding errors encountered
-///
-pub fn x3bin_to_wav<P: AsRef<path::Path>>(_x3bin_filename: P, _wav_filename: P) -> Result<usize, X3Error> {
-  // let mut file = File::open(x3bin_filename).unwrap();
-
-  // let mut buf = Vec::new();
-  // file.read_to_end(&mut buf).unwrap();
-  // let bytes = &mut ByteReader::new(&buf);
-
-  // let (sample_rate, params) = read_header(bytes)?;
-
-  // let (wav, num_errors) = decoder::decode_frames(bytes, &params)?;
-  // if num_errors > 0 {
-  //   eprintln!("Encountered {} decoding errors", num_errors);
-  // }
-
-  // let spec = hound::WavSpec {
-  //   channels: 1,
-  //   sample_rate: sample_rate as u32,
-  //   bits_per_sample: 16,
-  //   sample_format: hound::SampleFormat::Int,
-  // };
-
-  // // writer_u16 is faster than the plain writer
-  // let mut writer = hound::WavWriter::create(wav_filename, spec).unwrap();
-  // let mut writer_u16 = writer.get_i16_writer(wav.len() as u32);
-  // for w in wav {
-  //   writer_u16.write_sample(w);
-  // }
-  // writer_u16.flush()?;
-
-  // Ok(num_errors)
-  todo!()
 }
 
 ///
@@ -376,15 +330,10 @@ fn parse_xml(xml: &str) -> Result<(u32, x3::Parameters), X3Error> {
 
 #[cfg(test)]
 mod tests {
-  //   use crate::decodefile::{x3a_to_wav, x3bin_to_wav};
+  // use crate::decodefile::x3a_to_wav;
 
-  //   #[test]
-  //   fn test_decode_bin_file() {
-  //     x3bin_to_wav("~/tmp/test.bin", "~/tmp/test.linux.wav").unwrap();
-  //   }
-
-  //   #[test]
-  //   fn test_decode_x3a_file() {
-  //     x3a_to_wav("~/tmp/test.x3a", "~/tmp/test.wav").unwrap();
-  //   }
+  // #[test]
+  // fn test_decode_x3a_file() {
+  //   x3a_to_wav("~/tmp/test.x3a", "~/tmp/test.wav").unwrap();
+  // }
 }

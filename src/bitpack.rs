@@ -25,10 +25,11 @@ use crate::crc::crc16;
 
 #[derive(Debug)]
 pub enum BitPackError {
-  NotByteAligned,     // The bytes are not aligned.
-  BoundaryReached,    // The soft boundary has been reached.
-  ArrayEndReached,    // The end of the array has been reached.
-  SearchItemNotFound, // Search item not found within limit
+  None,                // No error
+  NotByteAligned,      // The bytes are not aligned.
+  BoundaryReached,     // The soft boundary has been reached.
+  ArrayEndReached,     // The end of the array has been reached.
+  ExceededBitBoundary, // More bits were read than we expected
 }
 
 //
@@ -221,145 +222,6 @@ impl<'a> BitPacker<'a> {
   ///
   pub fn as_bytes(&self) -> Result<&[u8], BitPackError> {
     Ok(&self.array[0..self.p_byte])
-  }
-}
-
-//
-// ######          ######
-// #     # # ##### #     # ######   ##   #####  ###### #####
-// #     # #   #   #     # #       #  #  #    # #      #    #
-// ######  #   #   ######  #####  #    # #    # #####  #    #
-// #     # #   #   #   #   #      ###### #    # #      #####
-// #     # #   #   #    #  #      #    # #    # #      #   #
-// ######  #   #   #     # ###### #    # #####  ###### #    #
-//
-
-///
-/// BitReader allows individual bits to be read from an array of bytes.
-///
-pub struct BitReader<'a> {
-  array: &'a [u8],
-
-  // Bit pointer
-  p_byte: usize,
-  p_bit: usize,
-}
-
-impl<'a> BitReader<'a> {
-  pub fn new(array: &'a mut [u8]) -> BitReader {
-    // FIXME: Need to handle big-endian, this "fixes" it, but it's ugly.
-    // {
-    //   for i in (0..array.len()).step_by(2) {
-    //     let j = i + 1;
-    //     if j >= array.len() {
-    //       break;
-    //     }
-    //     let a = array[i];
-    //     let b = array[j];
-    //     array[i] = b;
-    //     array[j] = a;
-    //   }
-    // }
-
-    BitReader {
-      array,
-      p_byte: 0,
-      p_bit: 0,
-    }
-  }
-
-  ///
-  /// Read the number of zeros in a packed bit array.  Starting at `p_byte` position
-  /// of the array and `p_bit` bit offset.
-  ///
-  /// ### Arguments
-  ///
-  /// * `num_bits` - The number of bits to read.
-  ///
-  /// ### Returns
-  ///
-  /// * The unsigned value returned.
-  ///
-  #[inline(always)]
-  pub fn read_nbits(&mut self, num_bits: usize) -> Result<u16, BitPackError> {
-    let rem_bit = 8 - self.p_bit;
-    let mask = ((1 << num_bits) - 1) as u16;
-    let value: u16;
-
-    if self.p_byte >= self.array.len() {
-      return Err(BitPackError::BoundaryReached);
-    }
-
-    if num_bits == rem_bit {
-      value = u16::from(self.array[self.p_byte]);
-      self.p_byte += 1;
-      self.p_bit = 0;
-    } else if num_bits < rem_bit {
-      let shift_r = rem_bit - num_bits;
-      value = u16::from(self.array[self.p_byte] >> shift_r);
-      self.p_bit += num_bits;
-    } else {
-      let shift_l = num_bits - rem_bit;
-      let tmp_value = (u16::from(self.array[self.p_byte]) << shift_l) as u16;
-      self.p_bit = 0;
-      self.p_byte += 1;
-
-      value = tmp_value | self.read_nbits(shift_l as usize)?;
-    }
-
-    Ok(value & mask)
-  }
-
-  ///
-  /// Read the number of zeros in a packed bit array.  Starting at `p_byte` position
-  /// of the array and `p_bit` bit offset.
-  ///
-  /// ### Returns
-  ///
-  /// * the number of consectutive zeros found in the array.
-  ///
-  #[inline(always)]
-  pub fn read_zero_bits(&mut self) -> Result<usize, BitPackError> {
-    let mut zeros = 0;
-
-    while self.p_byte < self.array.len() && self.array[self.p_byte] & (1 << (7 - self.p_bit)) == 0x00 {
-      self.p_bit += 1;
-      if self.p_bit == 8 {
-        self.p_bit = 0;
-        self.p_byte += 1;
-      }
-      zeros += 1;
-    }
-
-    Ok(zeros)
-  }
-
-  #[inline(always)]
-  pub fn read_int_larger_than(&mut self, lev: usize, out_val: &mut usize) -> Result<usize, BitPackError> {
-    let mut bits = 0;
-    let mut val = 0;
-    loop {
-      bits += 1;
-      if self.p_byte >= self.array.len() {
-        return Err(BitPackError::BoundaryReached);
-      }
-
-      if (self.array[self.p_byte] & (0x80 >> self.p_bit)) != 0 {
-        val += 1;
-      }
-
-      self.p_bit += 1;
-      if self.p_bit == 8 {
-        self.p_bit = 0;
-        self.p_byte += 1;
-      }
-
-      if val >= lev {
-        *out_val = val;
-        return Ok(bits);
-      }
-      val <<= 1;
-    }
   }
 }
 
@@ -570,79 +432,7 @@ impl<'a> ByteReader<'a> {
 
 #[cfg(test)]
 mod tests {
-  use crate::bitpack::{BitPacker, BitReader};
-
-  #[test]
-  fn test_read_zero_bits() {
-    let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0xf0];
-    let mut br = BitReader::new(inp_arr);
-
-    let zeros = br.read_zero_bits().unwrap();
-    assert_eq!(1, br.p_byte);
-    assert_eq!(4, br.p_bit);
-    assert_eq!(12, zeros);
-
-    let zeros = br.read_zero_bits().unwrap();
-    assert_eq!(1, br.p_byte);
-    assert_eq!(4, br.p_bit);
-    assert_eq!(0, zeros);
-
-    // Skip some bits
-    br.read_nbits(8).unwrap();
-
-    let zeros = br.read_zero_bits().unwrap();
-    assert_eq!(3, br.p_byte);
-    assert_eq!(0, br.p_bit);
-    assert_eq!(4, zeros);
-  }
-
-  #[test]
-  fn test_read_packed_bits() {
-    let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0x00];
-    let mut br = BitReader::new(inp_arr);
-    br.p_byte = 1;
-    br.p_bit = 4;
-    let value = br.read_nbits(4).unwrap();
-    assert_eq!(2, br.p_byte);
-    assert_eq!(0, br.p_bit);
-    assert_eq!(0x0f, value);
-
-    let inp_arr: &mut [u8] = &mut [0x00, 0xf9, 0x00];
-    let mut br = BitReader::new(inp_arr);
-    br.p_byte = 1;
-    br.p_bit = 1;
-    let value = br.read_nbits(6).unwrap();
-    assert_eq!(1, br.p_byte);
-    assert_eq!(7, br.p_bit);
-    assert_eq!(0x3c, value);
-
-    let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0xf0];
-    let mut br = BitReader::new(inp_arr);
-    br.p_byte = 1;
-    br.p_bit = 4;
-    let value = br.read_nbits(8).unwrap();
-    assert_eq!(2, br.p_byte);
-    assert_eq!(4, br.p_bit);
-    assert_eq!(0xff, value);
-
-    let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0xfa];
-    let mut br = BitReader::new(inp_arr);
-    br.p_byte = 1;
-    br.p_bit = 4;
-    let value = br.read_nbits(12).unwrap();
-    assert_eq!(3, br.p_byte);
-    assert_eq!(0, br.p_bit);
-    assert_eq!(0xffa, value);
-
-    let inp_arr: &mut [u8] = &mut [0x00, 0x6a, 0xca];
-    let mut br = BitReader::new(inp_arr);
-    br.p_byte = 1;
-    br.p_bit = 6;
-    let zeros = br.read_nbits(4).unwrap();
-    assert_eq!(2, br.p_byte);
-    assert_eq!(2, br.p_bit);
-    assert_eq!(0x0b, zeros);
-  }
+  use crate::bitpack::BitPacker;
 
   #[test]
   fn test_write_packed_bits() {
@@ -736,5 +526,4 @@ mod tests {
     assert_eq!(0, bp.p_bit);
     assert_eq!(&[0x00, 0x3c, 0x00], bp.array);
   }
-
 }

@@ -10,6 +10,11 @@ repository = "https://github.com/psiphi75/x3-rust"
 keywords = ["audio", "compression"]
 categories = ["compression", "embedded", "encoding", "multimedia::audio"]
 
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
 [build-dependencies]
 clippy = { version = "^0.0.302", optional = true }
 

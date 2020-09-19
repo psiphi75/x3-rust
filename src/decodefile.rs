@@ -105,6 +105,7 @@ impl X3aReader {
 
   pub async fn decode_next_frame(
     &mut self,
+    // frame_header: x3::FrameHeader,
     wav_buf: &mut [i16; X3_WRITE_BUFFER_SIZE],
     time: &mut i64,
   ) -> Result<Option<usize>, X3Error> {
@@ -148,7 +149,6 @@ async fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, u
   // <Archive Id>
   {
     let mut arc_header = [0u8; x3::Archive::ID.len()];
-    // read_bytes(&mut reader, &mut arc_header).await?;
     reader.read_exact(&mut arc_header).await?;
     if !arc_header.eq(x3::Archive::ID) {
       return Err(X3Error::ArchiveHeaderXMLInvalidKey);
@@ -158,7 +158,6 @@ async fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, u
   // <XML MetaData>
   let header = {
     let mut header_buf = [0u8; x3::FrameHeader::LENGTH];
-    // read_bytes(&mut reader, &mut header_buf).await?;
     reader.read_exact(&mut header_buf).await?;
     decoder::read_frame_header(&mut header_buf)?
   };
@@ -218,16 +217,11 @@ pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) 
         t += 1;
         times[t] = Utc::now().timestamp_nanos();
         t += 1;
-        for i in 0..samples {
-          writer.write_sample(wav[i])?;
-        }
+        write_samples(&mut writer, &wav, samples)?;
       }
       None => break,
     }
   }
-  times[t] = Utc::now().timestamp_nanos();
-  writer.flush()?;
-  times[t] = Utc::now().timestamp_nanos();
 
   let mut t = 0;
   loop {
@@ -237,6 +231,21 @@ pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) 
       break;
     }
   }
+  Ok(())
+}
+
+fn write_samples(
+  writer: &mut hound::WavWriter<std::io::BufWriter<std::fs::File>>,
+  buf: &[i16],
+  num_samples: usize,
+) -> Result<(), X3Error> {
+  let mut fast_writer = writer.get_i16_writer(num_samples as u32);
+  for i in 0..num_samples {
+    unsafe {
+      fast_writer.write_sample_unchecked(buf[i]);
+    }
+  }
+  fast_writer.flush()?;
   Ok(())
 }
 

@@ -24,6 +24,29 @@ use crate::byteorder::{BigEndian, ByteOrder};
 
 // TODO: Can we get this from std::u32?
 const BIT_LEN: usize = 32;
+const BYTES_PER_WORD: usize = 4;
+
+#[inline(always)]
+fn read_word(array: &[u8], idx: usize) -> (u32, usize) {
+    if array.len() - idx >= BYTES_PER_WORD {
+        let word = BigEndian::read_u32(&array[idx..]);
+        (word, BYTES_PER_WORD)
+    } else {
+        // We are at the end of the array
+        let remaining_idx = array.len() - idx;
+        let mut word = 0u32;
+        if remaining_idx >= 1 {
+            word |= (array[idx] as u32) << (3 * 8);
+        }
+        if remaining_idx >= 2 {
+            word |= (array[idx + 1] as u32) << (2 * 8);
+        }
+        if remaining_idx == 3 {
+            word |= (array[idx + 2] as u32) << (1 * 8);
+        }
+        (word, remaining_idx)
+    }
+}
 
 pub struct BitReader<'a> {
     array: &'a [u8],
@@ -34,17 +57,18 @@ pub struct BitReader<'a> {
     /// Leading byte, such that we don't need to read the array the whole time
     leading_word: u32,
 
-    /// The remaining number of bits in the word
+    /// The remaining number of bits to process in the word
     rem_bit: usize,
 }
 
 impl<'a> BitReader<'a> {
     pub fn new(array: &'a [u8]) -> Self {
+        let (leading_word, idx) = read_word(array, 0);
         Self {
             array,
-            idx: 4,
-            leading_word: BigEndian::read_u32(&array[0..]),
-            rem_bit: BIT_LEN,
+            idx,
+            leading_word,
+            rem_bit: idx * 8,
         }
     }
 
@@ -148,23 +172,8 @@ impl<'a> BitReader<'a> {
     fn peek_next(&self) -> Option<(u32, usize)> {
         if self.idx >= self.array.len() {
             None
-        } else if self.array.len() - self.idx >= 4 {
-            let word = BigEndian::read_u32(&self.array[self.idx..]);
-            Some((word, 4))
         } else {
-            // We are at the end of the array
-            let remaining_idx = self.array.len() - self.idx;
-            let mut word = 0u32;
-            if remaining_idx >= 1 {
-                word |= (self.array[self.idx] as u32) << (3 * 8);
-            }
-            if remaining_idx >= 2 {
-                word |= (self.array[self.idx + 1] as u32) << (2 * 8);
-            }
-            if remaining_idx == 3 {
-                word |= (self.array[self.idx + 2] as u32) << (1 * 8);
-            }
-            Some((word, remaining_idx))
+            Some(read_word(self.array, self.idx))
         }
     }
 }
@@ -191,6 +200,15 @@ mod tests {
         let br = BitReader::new(inp_arr);
 
         assert_eq!(32, br.rem_bit);
+        assert_eq!(0x000ff000, br.leading_word);
+    }
+
+    #[test]
+    fn test_bitreader_init_short() {
+        let inp_arr: &mut [u8] = &mut [0x00, 0x0f, 0xf0];
+        let br = BitReader::new(inp_arr);
+
+        assert_eq!(24, br.rem_bit);
         assert_eq!(0x000ff000, br.leading_word);
     }
 

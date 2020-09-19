@@ -79,7 +79,8 @@ The following items need to be worked on:
 - Add multiple channel capability - currently we can only handle mono.
 - Explicity use a `#![no_std]` option for embedded devices.
 - Peformance, it is currently slower than the flac encoder.
-- Not very memory efficient for de/encoding files. It will allocate all the memory upfront.
+- Not very memory efficient for encoding files. It will allocate all the memory upfront.
+- Seperate reading and decoding. Read frames in advance, maybe in a different way.
 
 ## License
 

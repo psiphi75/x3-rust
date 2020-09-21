@@ -20,13 +20,10 @@
  **************************************************************************/
 
 // std
-// use std::fs::File;
-// use std::io::{prelude::*, BufReader};
-// use chrono::DateTime;
 use chrono::prelude::*;
+use std::fs::File;
+use std::io::{prelude::*, BufReader};
 use std::path;
-use tokio::fs::File;
-use tokio::io::{AsyncReadExt, BufReader};
 
 // externs
 use crate::hound;
@@ -56,12 +53,12 @@ pub struct X3aReader {
 }
 
 impl X3aReader {
-  pub async fn open<P: AsRef<path::Path>>(filename: P) -> Result<Self, X3Error> {
-    let file = File::open(filename).await.unwrap();
-    let mut remaing_bytes = file.metadata().await?.len() as usize;
+  pub fn open<P: AsRef<path::Path>>(filename: P) -> Result<Self, X3Error> {
+    let file = File::open(filename).unwrap();
+    let mut remaing_bytes = file.metadata()?.len() as usize;
     let mut reader = BufReader::with_capacity(64 * 1024, file);
 
-    let (spec, header_size) = read_archive_header(&mut reader).await?;
+    let (spec, header_size) = read_archive_header(&mut reader)?;
     remaing_bytes -= header_size;
 
     Ok(Self {
@@ -77,22 +74,21 @@ impl X3aReader {
     &self.spec
   }
 
-  async fn read_bytes(&mut self, mut buf_len: usize) -> Result<usize, X3Error> {
+  fn read_bytes(&mut self, mut buf_len: usize) -> std::io::Result<()> {
     if self.remaing_bytes < buf_len {
       buf_len = self.remaing_bytes;
     }
     self.remaing_bytes -= buf_len;
-    let result = self.reader.read_exact(&mut self.read_buf[0..buf_len]).await?;
-    Ok(result)
+    self.reader.read_exact(&mut self.read_buf[0..buf_len])
   }
 
-  async fn read_frame_header(&mut self) -> Result<FrameHeader, X3Error> {
-    self.read_bytes(x3::FrameHeader::LENGTH).await?;
+  fn read_frame_header(&mut self) -> Result<FrameHeader, X3Error> {
+    self.read_bytes(x3::FrameHeader::LENGTH)?;
     decoder::read_frame_header(&self.read_buf[0..x3::FrameHeader::LENGTH])
   }
 
-  async fn read_frame_payload(&mut self, header: &FrameHeader) -> Result<(), X3Error> {
-    self.read_bytes(header.payload_len).await?;
+  fn read_frame_payload(&mut self, header: &FrameHeader) -> Result<(), X3Error> {
+    self.read_bytes(header.payload_len)?;
 
     let payload = &self.read_buf[0..header.payload_len];
     let crc = crc::crc16(&payload);
@@ -103,7 +99,7 @@ impl X3aReader {
     Ok(())
   }
 
-  pub async fn decode_next_frame(
+  pub fn decode_next_frame(
     &mut self,
     // frame_header: x3::FrameHeader,
     wav_buf: &mut [i16; X3_WRITE_BUFFER_SIZE],
@@ -115,7 +111,7 @@ impl X3aReader {
     }
 
     // Get the header details
-    let frame_header = self.read_frame_header().await?;
+    let frame_header = self.read_frame_header()?;
     let samples = frame_header.samples as usize;
     if self.remaing_bytes < frame_header.payload_len {
       return Ok(None);
@@ -126,7 +122,7 @@ impl X3aReader {
     }
 
     // Get the Payload
-    self.read_frame_payload(&frame_header).await?;
+    self.read_frame_payload(&frame_header)?;
     let x3_bytes = &mut self.read_buf[0..frame_header.payload_len];
     *time = Utc::now().timestamp_nanos();
 
@@ -145,11 +141,11 @@ impl X3aReader {
 ///
 /// Read the <Archive Header> from in the input buffer.
 ///
-async fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, usize), X3Error> {
+fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, usize), X3Error> {
   // <Archive Id>
   {
     let mut arc_header = [0u8; x3::Archive::ID.len()];
-    reader.read_exact(&mut arc_header).await?;
+    reader.read_exact(&mut arc_header)?;
     if !arc_header.eq(x3::Archive::ID) {
       return Err(X3Error::ArchiveHeaderXMLInvalidKey);
     }
@@ -158,13 +154,13 @@ async fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, u
   // <XML MetaData>
   let header = {
     let mut header_buf = [0u8; x3::FrameHeader::LENGTH];
-    reader.read_exact(&mut header_buf).await?;
+    reader.read_exact(&mut header_buf)?;
     decoder::read_frame_header(&mut header_buf)?
   };
 
   // Get the payload
   let mut payload: Vec<u8> = vec![0; header.payload_len];
-  reader.read_exact(&mut payload).await?;
+  reader.read_exact(&mut payload)?;
   let xml = String::from_utf8_lossy(&payload);
 
   let (sample_rate, params) = parse_xml(&xml)?;
@@ -192,8 +188,8 @@ async fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, u
 /// * `x3a_filename` - the input X3A file to decode.
 /// * `wav_filename` - the output wav file to write to.  It will be overwritten.
 ///
-pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Result<(), X3Error> {
-  let mut x3a_reader = X3aReader::open(x3a_filename).await?;
+pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Result<(), X3Error> {
+  let mut x3a_reader = X3aReader::open(x3a_filename)?;
 
   let x3_spec = x3a_reader.spec();
   let spec = hound::WavSpec {
@@ -211,7 +207,7 @@ pub async fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) 
     times[t] = Utc::now().timestamp_nanos();
     t += 1;
     let mut time = 0;
-    match x3a_reader.decode_next_frame(&mut wav, &mut time).await? {
+    match x3a_reader.decode_next_frame(&mut wav, &mut time)? {
       Some(samples) => {
         times[t] = time;
         t += 1;

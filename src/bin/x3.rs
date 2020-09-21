@@ -40,8 +40,7 @@ fn get_filetype(filename: &str) -> AudioFiles {
   panic!("Invalid audio file, expecting a '.wav' or '.x3a' file: {}", filename);
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
   let matches = App::new("x3")
     .version("0.3.0")
     .author("Simon Werner <simonwerner@gmail.com>")
@@ -78,6 +77,6 @@ async fn main() {
 
   match in_type {
     AudioFiles::Wav => x3::encodefile::wav_to_x3a(in_file, out_file).unwrap(),
-    AudioFiles::X3a => x3::decodefile::x3a_to_wav(in_file, out_file).await.unwrap(),
+    AudioFiles::X3a => x3::decodefile::x3a_to_wav(in_file, out_file).unwrap(),
   };
 }

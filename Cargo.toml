@@ -14,6 +14,7 @@ categories = ["compression", "embedded", "encoding", "multimedia::audio"]
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+# debug = true      # Enable debug for `perf` profiling
 
 [build-dependencies]
 clippy = { version = "^0.0.302", optional = true }

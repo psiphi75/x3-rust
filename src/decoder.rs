@@ -152,12 +152,20 @@ fn decode_ricecode_block_r1(
   ftype: usize,
 ) -> Result<(), X3Error> {
   let code = params.rice_codes[ftype - 1];
-  for wav_value in wav.iter_mut() {
-    let n = br.count_zero_bits();
+  let mut lw = *last_wav;
+  for b in 0..wav.len() {
+    let i = br.count_zero_bits();
     br.read_nbits(1); // skip the next bit
-    *last_wav += code.inv[n]; // Table lookup to convert to a signed number
-    *wav_value = *last_wav;
+
+    // Table lookup to convert to a signed number
+    if i >= code.inv_len {
+      return Err(X3Error::OutOfBoundsInverse);
+    }
+    lw += unsafe { code.inv.get_unchecked(i) };
+    let wav_value = unsafe { wav.get_unchecked_mut(b) };
+    *wav_value = lw;
   }
+  *last_wav = lw;
   Ok(())
 }
 
@@ -171,17 +179,19 @@ fn decode_ricecode_block_r2r3(
   let code = params.rice_codes[ftype - 1];
   let nb = if ftype == 2 { 2 } else { 4 };
   let level = 1 << code.nsubs;
-  for wav_value in wav.iter_mut() {
+  let mut lw = *last_wav;
+  for b in 0..wav.len() {
     let n = br.count_zero_bits() as i16;
     let r = br.read_nbits(nb) as i16;
-    let i = r + level * (n - 1);
-    if i as usize >= code.inv_len {
+    let i = (r + level * (n - 1)) as usize;
+    if i >= code.inv_len {
       return Err(X3Error::OutOfBoundsInverse);
     }
-    let diff = code.inv[i as usize];
-    *last_wav += diff;
-    *wav_value = *last_wav;
+    lw += unsafe { code.inv.get_unchecked(i) };
+    let wav_value = unsafe { wav.get_unchecked_mut(b) };
+    *wav_value = lw;
   }
+  *last_wav = lw;
   Ok(())
 }
 

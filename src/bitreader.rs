@@ -76,21 +76,18 @@ impl<'a> BitReader<'a> {
     #[inline(always)]
     pub fn inc_bits(&mut self, n: usize) {
         debug_assert!(n < BIT_LEN);
-        if n == 0 {
-            return;
-        }
 
         if n < self.rem_bit {
             self.leading_word <<= n;
             self.rem_bit -= n;
-        } else if n == self.rem_bit {
-            self.get_next();
-        } else {
-            //  n > self.rem_bit
+        } else if n > self.rem_bit {
             let rem = n - self.rem_bit;
             self.get_next();
             self.rem_bit = BIT_LEN - rem;
             self.leading_word <<= rem;
+        } else {
+            //  n == self.rem_bit
+            self.get_next();
         }
     }
 

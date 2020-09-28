@@ -25,7 +25,7 @@
 pub enum X3Error {
   Io(std::io::Error),
   Hound(hound::Error),
-  BitPack(crate::bitpack::BitPackError),
+  BitPack(crate::bitpacker::BitPackError),
 
   // Custom X3 Errors
   InvalidEncodingThresh, // Threshold must be less than or equal to code.offset
@@ -68,8 +68,8 @@ impl From<hound::Error> for X3Error {
   }
 }
 
-impl From<crate::bitpack::BitPackError> for X3Error {
-  fn from(err: crate::bitpack::BitPackError) -> X3Error {
+impl From<crate::bitpacker::BitPackError> for X3Error {
+  fn from(err: crate::bitpacker::BitPackError) -> X3Error {
     X3Error::BitPack(err)
   }
 }

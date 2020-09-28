@@ -23,7 +23,7 @@
 use crate::byteorder::{BigEndian, ByteOrder};
 
 // This crate
-use crate::bitpack::BitPacker;
+use crate::bitpacker::BitPacker;
 use crate::crc::crc16;
 use crate::error;
 use crate::x3;
@@ -86,7 +86,7 @@ pub fn write_frame_header(bp: &mut BitPacker, num_samples: usize, id: u8) -> Res
   let header: &mut [u8; x3::FrameHeader::LENGTH] = &mut [0u8; x3::FrameHeader::LENGTH];
 
   // frame_len = header.len + payload.len
-  let frame_len = bp.bookmark_get_offset()?;
+  let frame_len = bp.bookmark_get_offset();
   let payload_len = frame_len - x3::FrameHeader::LENGTH;
 
   // <Frame Key> = "x3"
@@ -122,14 +122,14 @@ pub fn write_frame_header(bp: &mut BitPacker, num_samples: usize, id: u8) -> Res
   p += 2;
 
   // <Payload CRC> = CRC of the payload
-  let frame = bp.bookmark_get_from()?;
+  let frame = bp.bookmark_get_from();
   let payload = &frame[x3::FrameHeader::LENGTH..(x3::FrameHeader::LENGTH + payload_len)];
   let payload_crc = crc16(payload);
   BigEndian::write_u16(&mut header[p..], payload_crc as u16);
 
   // Write it back to the bit stream
-  bp.word_align()?;
-  bp.bookmark_write(header)?;
+  bp.word_align();
+  bp.bookmark_write(header);
 
   Ok(())
 }
@@ -165,7 +165,7 @@ pub fn encode_frame(
   bp.inc_counter_n_bytes(x3::FrameHeader::LENGTH)?;
 
   // Write first sample, <Audio State>, as a raw value
-  bp.write_bits(wav[0] as usize, 16)?;
+  bp.write_bits(wav[0] as usize, 16);
 
   let wav_diff: &mut [i32] = &mut [0i32; x3::Parameters::MAX_BLOCK_LENGTH];
   while rem_samples > 0 {
@@ -184,7 +184,7 @@ pub fn encode_frame(
   }
 
   // Wrap the bit to the next significant bit
-  bp.word_align()?;
+  bp.word_align();
 
   // Write the header details
   write_frame_header(bp, wav.len(), 1)?;
@@ -220,63 +220,8 @@ fn diff(inp: &[i16], diff: &mut [i32], last_wav: i16) -> i32 {
 
 /// Count the number of bits that it takes to represent a number.
 #[inline(always)]
-fn count_bits(n: usize) -> usize {
-  // 64 - n.leading_zeros() as usize
-  if n == 1 {
-    return 1;
-  }
-  if n == 0 {
-    return 0;
-  }
-  if n < 1 << 2 {
-    return 2;
-  }
-  if n < 1 << 3 {
-    return 3;
-  }
-  if n < 1 << 4 {
-    return 4;
-  }
-  if n < 1 << 5 {
-    return 5;
-  }
-  if n < 1 << 6 {
-    return 6;
-  }
-  if n < 1 << 7 {
-    return 7;
-  }
-  if n < 1 << 8 {
-    return 8;
-  }
-  if n < 1 << 9 {
-    return 9;
-  }
-  if n < 1 << 10 {
-    return 10;
-  }
-  if n < 1 << 11 {
-    return 11;
-  }
-  if n < 1 << 12 {
-    return 12;
-  }
-  if n < 1 << 13 {
-    return 13;
-  }
-  if n < 1 << 14 {
-    return 14;
-  }
-  if n < 1 << 15 {
-    return 15;
-  }
-  if n < 1 << 16 {
-    return 16;
-  }
-  if n < 1 << 17 {
-    return 17;
-  }
-  18
+fn count_bits(n: u32) -> u32 {
+  32 - n.leading_zeros()
 }
 
 fn encode_rice_block(
@@ -298,7 +243,7 @@ fn encode_rice_block(
   }
 
   // 2 bit rice block header
-  bp.write_bits(ftype as usize + 1, 2)?;
+  bp.write_bits(ftype as usize + 1, 2);
   let rc = params.rice_codes[ftype];
   let codes = rc.code;
   let num_bits = rc.num_bits;
@@ -308,10 +253,10 @@ fn encode_rice_block(
     let ii = (*w + offset as i32) as usize;
     let code = codes[ii];
     let rc_num_bits = num_bits[ii];
-    let num_zeros = rc_num_bits - count_bits(code);
+    let num_zeros = rc_num_bits - count_bits(code as u32) as usize;
 
-    bp.write_packed_zeros(num_zeros)?;
-    bp.write_bits(code, rc_num_bits - num_zeros)?;
+    bp.write_packed_zeros(num_zeros);
+    bp.write_bits(code, rc_num_bits - num_zeros);
   }
 
   Ok(rc.nsubs)
@@ -327,22 +272,22 @@ fn encode_bfp_block(
   let ftype: usize; // find which code to use
 
   // number of bits needed to represent right-justified samples
-  let num_bits = count_bits(max_abs_inp_filtd as usize); // number of bits
+  let num_bits = count_bits(max_abs_inp_filtd as u32); // number of bits
 
   if num_bits >= 15 {
-    bp.write_bits(15, BFP_HDR_LEN)?;
+    bp.write_bits(15, BFP_HDR_LEN);
     // We write all the bytes out without any compression
     let mut w = i32::from(wav[0]);
     for wd in wav_diff.iter().take(block_len) {
       w += *wd as i32;
-      bp.write_bits(w as usize, 16)?;
+      bp.write_bits(w as usize, 16);
     }
     ftype = 5;
   } else {
-    bp.write_bits(num_bits as usize, BFP_HDR_LEN)?;
+    bp.write_bits(num_bits as usize, BFP_HDR_LEN);
     // Reduce the number of bits only.
     for wd in wav_diff.iter().take(block_len) {
-      bp.write_bits(*wd as usize, num_bits + 1)?;
+      bp.write_bits(*wd as usize, num_bits as usize + 1);
     }
     ftype = 4;
   }
@@ -383,7 +328,7 @@ fn x3_encode_block(
 
 #[cfg(test)]
 mod tests {
-  use crate::bitpack::BitPacker;
+  use crate::bitpacker::BitPacker;
   use crate::encoder;
   use crate::encoder::{encode_frame, x3_encode_block};
   use crate::x3;
@@ -508,7 +453,7 @@ mod tests {
 
     encode_frame(wav, &mut last_wav, bp, params, stats).unwrap();
 
-    assert_eq!(expected_x3_output, bp.as_bytes().unwrap());
+    assert_eq!(expected_x3_output, bp.as_bytes());
   }
 
   #[test]
@@ -538,7 +483,7 @@ mod tests {
 
     encode_frame(wav, &mut last_wav, bp, params, stats).unwrap();
 
-    assert_eq!(expected_x3_output, bp.as_bytes().unwrap());
+    assert_eq!(expected_x3_output, bp.as_bytes());
   }
 
   #[test]
@@ -556,12 +501,12 @@ mod tests {
 
     // Run the code
     x3_encode_block(wav, wav_diff, last_wav, bp, params).unwrap();
-    bp.word_align().unwrap();
+    bp.word_align();
 
     // Check output is okay
     let expected_x3_output: &[u8] = &[202, 56, 106, 202, 124, 8, 122, 249, 136, 173, 202, 23, 80, 0];
 
-    assert_eq!(expected_x3_output, bp.as_bytes().unwrap());
+    assert_eq!(expected_x3_output, bp.as_bytes());
   }
 
   #[test]
@@ -578,14 +523,14 @@ mod tests {
     let wav_diff: &mut [i32] = &mut [0i32; x3::Parameters::MAX_BLOCK_LENGTH];
 
     // Run the code
-    bp.write_packed_zeros(1).unwrap();
+    bp.write_packed_zeros(1);
     x3_encode_block(wav, wav_diff, last_wav, bp, params).unwrap();
-    bp.word_align().unwrap();
+    bp.word_align();
 
     // Check output is okay
     let expected_x3_output: &[u8] = &[105, 111, 24, 196, 18, 125, 42, 40, 203, 219, 178, 194, 206, 0];
 
-    assert_eq!(expected_x3_output, bp.as_bytes().unwrap());
+    assert_eq!(expected_x3_output, bp.as_bytes());
   }
 
   #[test]
@@ -603,7 +548,7 @@ mod tests {
 
     // Run the code
     x3_encode_block(wav, wav_diff, last_wav, bp, params).unwrap();
-    bp.word_align().unwrap();
+    bp.word_align();
 
     // Check output is okay
     let expected_x3_output: &[u8] = &[
@@ -611,7 +556,7 @@ mod tests {
       252, 149, 240, 72, 20, 156, 172, 146, 59, 245, 23, 131, 33, 103, 33, 100, 0,
     ];
 
-    assert_eq!(expected_x3_output, bp.as_bytes().unwrap());
+    assert_eq!(expected_x3_output, bp.as_bytes());
   }
 
   #[test]
@@ -629,7 +574,7 @@ mod tests {
 
     // Run the code
     x3_encode_block(wav, wav_diff, last_wav, bp, params).unwrap();
-    bp.word_align().unwrap();
+    bp.word_align();
 
     // Check output is okay
     let expected_x3_output: &[u8] = &[
@@ -659,6 +604,6 @@ mod tests {
     encoder::encode(&[&first_channel], bp).unwrap();
 
     // Get the bytes
-    let _x3_bytes = bp.as_bytes().unwrap();
+    let _x3_bytes = bp.as_bytes();
   }
 }

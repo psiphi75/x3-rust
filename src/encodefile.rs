@@ -28,7 +28,7 @@ use std::path;
 use crate::hound;
 
 // this crate
-use crate::bitpack::BitPacker;
+use crate::bitpacker::BitPacker;
 use crate::encoder;
 use crate::error;
 use crate::x3;
@@ -71,7 +71,7 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
 
   // Write to disk
   let mut file = File::create(x3a_filename)?;
-  file.write_all(bp.as_bytes()?)?;
+  file.write_all(bp.as_bytes())?;
 
   Ok(())
 }
@@ -81,7 +81,7 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
 //
 fn create_archive_header(ch: &x3::Channel, bp: &mut BitPacker) -> Result<(), X3Error> {
   // <Archive Id>
-  bp.write_bytes(x3::Archive::ID)?;
+  bp.write_bytes(x3::Archive::ID);
 
   // Make space for the header
   bp.bookmark();
@@ -114,10 +114,10 @@ fn create_archive_header(ch: &x3::Channel, bp: &mut BitPacker) -> Result<(), X3E
   .concat();
 
   // <XML MetaData>
-  bp.write_bytes(xml.as_bytes())?;
+  bp.write_bytes(xml.as_bytes());
   if xml.len() % 2 == 1 {
     // Align to the nearest word
-    bp.write_bits(0, 8)?;
+    bp.write_bits(0, 8);
   }
 
   // <Frame Header>

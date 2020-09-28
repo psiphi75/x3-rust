@@ -38,7 +38,7 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 
 pub const X3_READ_BUFFER_SIZE: usize = 1024 * 24;
-pub const X3_WRITE_BUFFER_SIZE: usize = X3_READ_BUFFER_SIZE * 8; // TODO: Need to make sure we
+pub const X3_WRITE_BUFFER_SIZE: usize = X3_READ_BUFFER_SIZE * 8;
 
 pub struct X3aReader {
   reader: BufReader<File>,
@@ -48,7 +48,7 @@ pub struct X3aReader {
 
   /// The count of errors.
   /// TODO: Count each type of error
-  errors: usize,
+  frame_errors: usize,
 }
 
 impl X3aReader {
@@ -65,7 +65,7 @@ impl X3aReader {
       spec,
       remaing_bytes,
       read_buf: [0u8; X3_READ_BUFFER_SIZE],
-      errors: 0,
+      frame_errors: 0,
     })
   }
 
@@ -112,7 +112,8 @@ impl X3aReader {
     }
 
     if frame_header.payload_len > X3_READ_BUFFER_SIZE {
-      panic!("Payload is large than the available buffer size");
+      // Payload is larger than the available buffer size
+      return Err(X3Error::FrameHeaderInvalidPayloadLen);
     }
 
     // Get the Payload
@@ -123,8 +124,8 @@ impl X3aReader {
     match decoder::decode_frame(x3_bytes, wav_buf, &self.spec.params, samples) {
       Ok(result) => Ok(result),
       Err(err) => {
-        self.errors += 1;
-        println!("ERROR occurred: {:?}", err);
+        self.frame_errors += 1;
+        println!("Frame error: {:?}", err);
         Ok(None)
       }
     }

@@ -25,3 +25,18 @@ hound = "3.4.0"
 quick-xml = "0.18.1"
 clap = "2.33.1"
 chrono = "0.4.15"
+
+[features]
+# default = ["std"]
+std = []
+alloc = []
+
+[[bin]]
+name = "x3"
+path = "bin/x3.rs"
+required-features = ["std"]
+
+[[bin]]
+name = "wav_to_str"
+path = "bin/wav_to_str.rs"
+required-features = ["std"]

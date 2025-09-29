@@ -59,16 +59,18 @@ pub fn encode(channels: &[&x3::Channel], bp: &mut BitPacker) -> Result<(), X3Err
     num_samples -= encode_num_samples;
   }
 
-  let t = (stats[0] + stats[1] + stats[2] + stats[3] + stats[4] + stats[5]) as f32;
-  println!(
-    "\nStatistics:\n  Rice-0: {:.4}%\n  Rice-1: {:.4}%\n  Rice-2: {:.4}%\n  Rice-3: {:.4}%\n  BFP: {:.4}%\n  Pass-through {:.4}%\n",
-    (stats[0] as f32 / t) * 100.0,
-    (stats[1] as f32 / t) * 100.0,
-    (stats[2] as f32 / t) * 100.0,
-    (stats[3] as f32 / t) * 100.0,
-    (stats[4] as f32 / t) * 100.0,
-    (stats[5] as f32 / t) * 100.0
-  );
+  #[cfg(feature = "std")]{
+    let t = (stats[0] + stats[1] + stats[2] + stats[3] + stats[4] + stats[5]) as f32;
+    println!(
+      "\nStatistics:\n  Rice-0: {:.4}%\n  Rice-1: {:.4}%\n  Rice-2: {:.4}%\n  Rice-3: {:.4}%\n  BFP: {:.4}%\n  Pass-through {:.4}%\n",
+      (stats[0] as f32 / t) * 100.0,
+      (stats[1] as f32 / t) * 100.0,
+      (stats[2] as f32 / t) * 100.0,
+      (stats[3] as f32 / t) * 100.0,
+      (stats[4] as f32 / t) * 100.0,
+      (stats[5] as f32 / t) * 100.0
+    );
+  }
 
   Ok(())
 }
@@ -328,11 +330,16 @@ fn x3_encode_block(
 
 #[cfg(test)]
 mod tests {
+  
   use crate::bitpacker::BitPacker;
   use crate::encoder;
   use crate::encoder::{encode_frame, x3_encode_block};
   use crate::x3;
   use crate::x3::Parameters;
+  
+  extern crate std;
+  use std::vec;
+  use std::vec::Vec;
 
   const NUM_SAMPLES: usize = 0x0eff;
 

@@ -18,6 +18,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.   *
  *                                                                        *
  **************************************************************************/
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
 
 extern crate byteorder;
 extern crate hound;
@@ -26,8 +30,10 @@ pub mod bitpacker;
 pub mod bitreader;
 pub mod bytereader;
 pub mod crc;
+#[cfg(feature = "std")]
 pub mod decodefile;
 pub mod decoder;
+#[cfg(feature = "std")]
 pub mod encodefile;
 pub mod encoder;
 pub mod error;

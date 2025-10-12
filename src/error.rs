@@ -19,6 +19,8 @@
  *                                                                        *
  **************************************************************************/
 
+pub type Result<T> = core::result::Result<T, X3Error>;
+
 // We derive `Debug` because all types should probably derive `Debug`.
 // This gives us a reasonable human readable description of `CliError` values.
 #[derive(Debug)]

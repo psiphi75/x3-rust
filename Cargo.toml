@@ -33,10 +33,10 @@ alloc = []
 
 [[bin]]
 name = "x3"
-path = "bin/x3.rs"
+path = "src/bin/x3.rs"
 required-features = ["std"]
 
 [[bin]]
 name = "wav_to_str"
-path = "bin/wav_to_str.rs"
+path = "src/bin/wav_to_str.rs"
 required-features = ["std"]

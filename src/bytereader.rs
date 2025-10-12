@@ -43,7 +43,7 @@ pub struct ByteReader<'a> {
 }
 
 impl<'a> ByteReader<'a> {
-  pub fn new(array: &'a [u8]) -> ByteReader {
+  pub fn new(array: &'a [u8]) -> ByteReader<'a> {
     ByteReader { array, p_byte: 0 }
   }
 

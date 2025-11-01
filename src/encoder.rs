@@ -33,6 +33,12 @@ use error::X3Error;
 #[cfg(feature = "std")]
 use std::println;
 
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
 ///
 /// Encode a wav file (represented as `Channels`).  The output will be written to `bp`.
 ///
@@ -54,22 +60,34 @@ pub fn encode<'a, I>(channels: &mut [&mut x3::IterChannel<I>], bp: &mut BitPacke
 
   let stats: &mut [usize; 6] = &mut [0; 6];
 
-  // FIXME: This could still be more memory efficient by collecting this iterator on the block level instead of the frame level.
-  // FIXME: This is the default frame size is used instead of maximum frame size
-  let mut frame_buffer = [0i16; x3::Parameters::MAX_BLOCK_LENGTH*x3::Parameters::DEFAULT_BLOCKS_PER_FRAME];
-  loop {
-    // collect frame samples
-    let mut frame_length = 0;
-    for (i, fs) in wav.by_ref().take(samples_per_frame).enumerate() {
-      frame_buffer[i] = fs;
-      frame_length = i;
-    }
 
-    if frame_length == 0{
-      break;
+  #[cfg(any(feature = "alloc", feature = "std"))]
+    loop{
+      let frame_buffer = wav.by_ref().take(samples_per_frame).collect::<Vec<i16>>();
+      if frame_buffer.len() == 0 {
+        break;
+      }
+      encode_frame(&frame_buffer, bp, &ch.params, stats)?;
     }
+  }
+  #[cfg(not(feature = "std"))]{
+    // FIXME: This could still be more memory efficient by collecting this iterator on the block level instead of the frame level.
+    // FIXME: This is the default frame size is used instead of maximum frame size
+    let mut frame_buffer = [0i16; x3::Parameters::MAX_BLOCK_LENGTH*x3::Parameters::DEFAULT_BLOCKS_PER_FRAME];
+    loop {
+      // collect frame samples
+      let mut frame_length = 0;
+      for (i, fs) in wav.by_ref().take(samples_per_frame).enumerate() {
+        frame_buffer[i] = fs;
+        frame_length = i;
+      }
 
-    encode_frame(&frame_buffer[..frame_length+1], bp, &ch.params, stats)?;
+      if frame_length == 0{
+        break;
+      }
+
+      encode_frame(&frame_buffer[..frame_length+1], bp, &ch.params, stats)?;
+    }
   }
 
   #[cfg(feature = "std")]{

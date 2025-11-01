@@ -23,6 +23,9 @@
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(any(feature = "alloc", feature = "std"))]
+extern crate alloc;
+
 extern crate byteorder;
 extern crate hound;
 

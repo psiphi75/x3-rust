@@ -30,6 +30,9 @@ use crate::x3;
 
 use error::X3Error;
 
+#[cfg(feature = "std")]
+use std::println;
+
 ///
 /// Encode a wav file (represented as `Channels`).  The output will be written to `bp`.
 ///
@@ -38,20 +41,19 @@ use error::X3Error;
 /// * `channels` - The list of channels to encode.  // FIXME: This is currently only one.
 /// * `bp` - A `BitPacker` where the compressed data will be written to.
 ///
-pub fn encode<'a, I>(channels: &[&x3::IterChannel<'a, I>], bp: &mut BitPacker) -> Result<(), X3Error> 
-  where I: Iterator<Item = &'a i16> + Clone
+pub fn encode<'a, I>(channels: &mut [&mut x3::IterChannel<I>], bp: &mut BitPacker) -> Result<(), X3Error> 
+  where I: Iterator<Item = i16>
 {
   if channels.len() > 1 {
     return Err(X3Error::MoreThanOneChannel);
   }
-  let ch = &channels[0];
-  let mut wav = ch.wav.clone();
+  let ch = &mut channels[0];
+  let wav = &mut ch.wav;
 
   let samples_per_frame = ch.params.block_len * ch.params.blocks_per_frame;
 
   let stats: &mut [usize; 6] = &mut [0; 6];
 
-  
   // FIXME: This could still be more memory efficient by collecting this iterator on the block level instead of the frame level.
   // FIXME: This is the default frame size is used instead of maximum frame size
   let mut frame_buffer = [0i16; x3::Parameters::MAX_BLOCK_LENGTH*x3::Parameters::DEFAULT_BLOCKS_PER_FRAME];
@@ -59,7 +61,7 @@ pub fn encode<'a, I>(channels: &[&x3::IterChannel<'a, I>], bp: &mut BitPacker) -
     // collect frame samples
     let mut frame_length = 0;
     for (i, fs) in wav.by_ref().take(samples_per_frame).enumerate() {
-      frame_buffer[i] = *fs;
+      frame_buffer[i] = fs;
       frame_length = i;
     }
 

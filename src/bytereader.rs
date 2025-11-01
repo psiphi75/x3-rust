@@ -24,6 +24,9 @@ use crate::bitpacker::BitPackError;
 use crate::byteorder::{BigEndian, ByteOrder, LittleEndian};
 use crate::crc::crc16;
 
+#[cfg(any(feature = "alloc", feature = "std"))]
+use alloc::vec::Vec;
+
 //
 // ######                       ######
 // #     # #     # ##### ###### #     # ######   ##   #####  ###### #####

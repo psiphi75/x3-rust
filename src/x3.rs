@@ -44,8 +44,8 @@ impl<'a> Channel<'a> {
   }
 }
 
-pub struct IterChannel<'a, I>
-  where  I: Iterator<Item = &'a i16>
+pub struct IterChannel<I>
+  where  I: Iterator<Item = i16>
 {
   pub id: u16,            // The channel number
   pub wav: I,         // Raw sample iterator
@@ -53,8 +53,8 @@ pub struct IterChannel<'a, I>
   pub params: Parameters, // X3 encoding parameters
 }
 
-impl<'a, I> IterChannel<'a, I> 
-  where I: Iterator<Item = &'a i16>
+impl<'a, I> IterChannel<I> 
+  where I: Iterator<Item =i16>
 {
   pub fn new(id: u16, wav: impl IntoIterator<IntoIter = I>, sample_rate: u32, params: Parameters) -> Self {
     IterChannel {
@@ -75,6 +75,7 @@ pub struct X3aSpec {
   /// The number of channels in use
   pub channels: u8,
 }
+
 pub struct Parameters {
   pub block_len: usize,
   pub blocks_per_frame: usize,

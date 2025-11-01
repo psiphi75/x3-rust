@@ -69,7 +69,7 @@ pub fn encode<'a, I>(channels: &mut [&mut x3::IterChannel<I>], bp: &mut BitPacke
       break;
     }
 
-    encode_frame(&frame_buffer[..frame_length], bp, &ch.params, stats)?;
+    encode_frame(&frame_buffer[..frame_length+1], bp, &ch.params, stats)?;
   }
 
   #[cfg(feature = "std")]{

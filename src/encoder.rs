@@ -583,14 +583,14 @@ mod tests {
     let num_samples = wav.len();
 
     // Create the channel data
-    let first_channel = x3::IterChannel::new(0, wav.iter(), sample_rate, params);
+    let mut first_channel = x3::IterChannel::new(0, wav.into_iter(), sample_rate, params);
 
     // Create the output data
     let x3_len = num_samples * 2;
     let mut x3_out = vec![0u8; x3_len];
     let bp = &mut BitPacker::new(&mut x3_out); // Packer where x3 compressed data is stored.
 
-    encoder::encode(&[&first_channel], bp).unwrap();
+    encoder::encode(&mut [&mut first_channel], bp).unwrap();
 
     // Get the bytes
     let _x3_bytes = bp.as_bytes();

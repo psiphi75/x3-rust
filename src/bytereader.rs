@@ -24,9 +24,6 @@ use crate::bitpacker::BitPackError;
 use crate::byteorder::{BigEndian, ByteOrder, LittleEndian};
 use crate::crc::crc16;
 
-#[cfg(any(feature = "alloc", feature = "std"))]
-use alloc::vec::Vec;
-
 //
 // ######                       ######
 // #     # #     # ##### ###### #     # ######   ##   #####  ###### #####
@@ -79,36 +76,6 @@ impl<'a> ByteReader<'a> {
       self.p_byte += 1;
     }
     false
-  }
-
-  #[cfg(any(feature = "alloc", feature = "std"))]
-  pub fn extract(&self, p_start: usize, p_end: usize) -> Result<Vec<u8>, BitPackError> {
-    if p_start > self.array.len() || p_end > self.array.len() {
-      Err(BitPackError::ArrayEndReached)
-    } else {
-      Ok(self.array[p_start..p_end].to_vec())
-    }
-  }
-
-  ///
-  /// Check if `buf` and ByteReader array at the current read position contain the
-  /// same information.
-  ///
-  /// Note:
-  ///
-  /// ### Arguments
-  /// * `buf` - The array where the bytes will be written to.
-  ///
-  #[inline(always)]
-  pub fn eq(&self, buf: &[u8]) -> bool {
-    let mut p = self.p_byte;
-    for b in buf {
-      if *b != self.array[p] {
-        return false;
-      };
-      p += 1;
-    }
-    true
   }
 
   ///

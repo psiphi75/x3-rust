@@ -41,14 +41,14 @@ pub fn decode_frame(
 ) -> Result<Option<usize>, X3Error> {
   let mut last_wav = BigEndian::read_i16(x3_bytes);
   let mut p_wav = 0;
-  wav_buf[p_wav] = last_wav as i16;
+  wav_buf[p_wav] = last_wav;
   p_wav += 1;
-  let br = &mut BitReader::new(&mut x3_bytes[2..]);
+  let br = &mut BitReader::new(&x3_bytes[2..]);
   let mut remaining_samples = samples - 1;
 
   while remaining_samples > 0 {
     let block_len = core::cmp::min(remaining_samples, params.block_len);
-    decode_block(br, &mut wav_buf[p_wav..(p_wav + block_len)], &mut last_wav, &params)?;
+    decode_block(br, &mut wav_buf[p_wav..(p_wav + block_len)], &mut last_wav, params)?;
 
     remaining_samples -= block_len;
     p_wav += block_len;
@@ -226,7 +226,7 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> 
     for wav_value in wav.iter_mut() {
       let diff = br.read_nbits(num_bits) as u16;
       value += unsigned_to_i16(diff, num_bits);
-      *wav_value = value as i16;
+      *wav_value = value;
     }
   }
   *last_wav = wav[wav.len() - 1];

@@ -42,7 +42,7 @@ fn read_word(array: &[u8], idx: usize) -> (u32, usize) {
       word |= (array[idx + 1] as u32) << (2 * 8);
     }
     if remaining_idx == 3 {
-      word |= (array[idx + 2] as u32) << (1 * 8);
+      word |= (array[idx + 2] as u32) << (8);
     }
     (word, remaining_idx)
   }

@@ -231,7 +231,7 @@ fn write_samples(
 ///
 fn parse_xml(xml: &str) -> Result<(u32, x3::Parameters), X3Error> {
   let mut reader = Reader::from_str(xml);
-  reader.trim_text(true);
+  reader.config_mut().trim_text(true);
 
   let mut buf = Vec::new();
   let mut fs = Vec::with_capacity(3);
@@ -241,12 +241,12 @@ fn parse_xml(xml: &str) -> Result<(u32, x3::Parameters), X3Error> {
 
   // The `Reader` does not implement `Iterator` because it outputs borrowed data (`Cow`s)
   loop {
-    match reader.read_event(&mut buf) {
-      Ok(Event::Start(ref e)) => match e.name() {
-        b"FS" => fs.push(reader.read_text(e.name(), &mut Vec::new()).unwrap()),
-        b"BLKLEN" => bl.push(reader.read_text(e.name(), &mut Vec::new()).unwrap()),
-        b"CODES" => codes.push(reader.read_text(e.name(), &mut Vec::new()).unwrap()),
-        b"T" => th.push(reader.read_text(e.name(), &mut Vec::new()).unwrap()),
+    match reader.read_event_into(&mut buf) {
+      Ok(Event::Start(ref e)) => match e.name().as_ref() {
+        b"FS" => fs.push(reader.read_text(e.name()).unwrap()),
+        b"BLKLEN" => bl.push(reader.read_text(e.name()).unwrap()),
+        b"CODES" => codes.push(reader.read_text(e.name()).unwrap()),
+        b"T" => th.push(reader.read_text(e.name()).unwrap()),
         _ => (),
       },
       Ok(Event::Eof) => break, // exits the loop when reaching end of file

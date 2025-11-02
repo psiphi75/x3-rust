@@ -48,9 +48,9 @@ use std::vec::Vec;
 /// * `channels` - The list of channels to encode.  // FIXME: This is currently only one.
 /// * `bp` - A `BitPacker` where the compressed data will be written to.
 ///
-pub fn encode<'a, I, W>(channels: &mut [&mut x3::IterChannel<I>], writer: &mut W) -> Result<(), X3Error> 
-  where I: Iterator<Item = i16>,
-    W: ByteWriter
+pub fn encode<'a, I, W: ByteWriter>(channels: &mut [&mut x3::IterChannel<I>], writer: &mut W) -> Result<(), X3Error> 
+where 
+  I: Iterator<Item = i16>,
 {
   if channels.len() > 1 {
     return Err(X3Error::MoreThanOneChannel);
@@ -62,9 +62,9 @@ pub fn encode<'a, I, W>(channels: &mut [&mut x3::IterChannel<I>], writer: &mut W
 
   let stats: &mut [usize; 6] = &mut [0; 6];
 
-
-  #[cfg(any(feature = "alloc", feature = "std"))]{
-    loop{
+  #[cfg(any(feature = "alloc", feature = "std"))]
+  {
+    loop {
       let frame_buffer = wav.by_ref().take(samples_per_frame).collect::<Vec<i16>>();
       if frame_buffer.len() == 0 {
         break;
@@ -72,10 +72,11 @@ pub fn encode<'a, I, W>(channels: &mut [&mut x3::IterChannel<I>], writer: &mut W
       encode_frame(&frame_buffer, writer, &ch.params, stats)?;
     }
   }
-  #[cfg(not(feature = "std"))]{
+  #[cfg(not(feature = "std"))]
+  {
     // FIXME: This could still be more memory efficient by collecting this iterator on the block level instead of the frame level.
     // FIXME: This is the default frame size is used instead of maximum frame size
-    let mut frame_buffer = [0i16; x3::Parameters::MAX_BLOCK_LENGTH*x3::Parameters::DEFAULT_BLOCKS_PER_FRAME];
+    let mut frame_buffer = [0i16; x3::Parameters::MAX_BLOCK_LENGTH * x3::Parameters::DEFAULT_BLOCKS_PER_FRAME];
     loop {
       // collect frame samples
       let mut frame_length = 0;
@@ -84,7 +85,7 @@ pub fn encode<'a, I, W>(channels: &mut [&mut x3::IterChannel<I>], writer: &mut W
         frame_length = i;
       }
 
-      if frame_length == 0{
+      if frame_length == 0 {
         break;
       }
 
@@ -92,7 +93,8 @@ pub fn encode<'a, I, W>(channels: &mut [&mut x3::IterChannel<I>], writer: &mut W
     }
   }
 
-  #[cfg(feature = "std")]{
+  #[cfg(feature = "std")]
+  {
     let t = (stats[0] + stats[1] + stats[2] + stats[3] + stats[4] + stats[5]) as f32;
     println!(
       "\nStatistics:\n  Rice-0: {:.4}%\n  Rice-1: {:.4}%\n  Rice-2: {:.4}%\n  Rice-3: {:.4}%\n  BFP: {:.4}%\n  Pass-through {:.4}%\n",
@@ -149,9 +151,9 @@ pub fn write_frame_header(num_samples: usize, id: u8, payload_len: usize, payloa
 
   // <Header CRC> = CRC of the frame header
   let header_crc = crc16(&header[0..x3::FrameHeader::P_HEADER_CRC]);
-  BigEndian::write_u16(&mut header[p..], header_crc as u16);
+  BigEndian::write_u16(&mut header[p..], header_crc);
   p += 2;
-  
+
   // <Payload CRC> = CRC of the payload
   BigEndian::write_u16(&mut header[p..], payload_crc as u16);
 
@@ -218,9 +220,8 @@ pub fn encode_frame<W: ByteWriter>(
 // * the maximum absolute value found in the diff.
 //
 #[inline(always)]
-fn diff<'a>(inp: &'a[i16]) -> impl Iterator<Item = i32> + 'a {
-    inp.windows(2)
-      .map(|w| i32::from(w[1]) - i32::from(w[0])) // collect on block level
+fn diff<'a>(inp: &'a [i16]) -> impl Iterator<Item = i32> + 'a {
+  inp.windows(2).map(|w| i32::from(w[1]) - i32::from(w[0])) // collect on block level
 }
 
 /// Count the number of bits that it takes to represent a number.
@@ -265,11 +266,7 @@ fn encode_rice_block<W: ByteWriter>(
   Ok(rc.nsubs)
 }
 
-fn encode_bfp_block<W: ByteWriter>(
-  wav_diff: &[i32],
-  bp: &mut BitPacker<W>,
-  num_bits: usize,
-) -> Result<usize, X3Error> {
+fn encode_bfp_block<W: ByteWriter>(wav_diff: &[i32], bp: &mut BitPacker<W>, num_bits: usize) -> Result<usize, X3Error> {
   bp.write_bits(num_bits as usize, BFP_HDR_LEN)?;
   // Reduce the number of bits only.
   for wd in wav_diff {
@@ -278,14 +275,11 @@ fn encode_bfp_block<W: ByteWriter>(
   Ok(4)
 }
 
-fn encode_literal<W: ByteWriter>(
-  wav: &[i16],
-  bp: &mut BitPacker<W>,
-) -> Result<usize, X3Error> {
+fn encode_literal<W: ByteWriter>(wav: &[i16], bp: &mut BitPacker<W>) -> Result<usize, X3Error> {
   // We write all the bytes out without any compression
   bp.write_bits(15, BFP_HDR_LEN)?;
   for w in wav {
-    bp.write_bits(*w as usize,i16::BITS as usize)?;
+    bp.write_bits(*w as usize, i16::BITS as usize)?;
   }
   Ok(5)
 }
@@ -298,7 +292,6 @@ fn x3_encode_block<W: ByteWriter>(
   bp: &mut BitPacker<W>,
   params: &x3::Parameters,
 ) -> Result<usize, X3Error> {
-
   //collect wav_diff
   let wav_diff: &mut [i32] = &mut [0i32; x3::Parameters::MAX_BLOCK_LENGTH];
   let mut max_abs_inp_filtd = 0;
@@ -306,7 +299,7 @@ fn x3_encode_block<W: ByteWriter>(
     wav_diff[i] = wd;
     max_abs_inp_filtd = max_abs_inp_filtd.max(wd.abs());
   }
-  let wav_diff= &wav_diff[..wav.len()];
+  let wav_diff = &wav_diff[..wav.len()];
 
   if max_abs_inp_filtd <= params.thresholds[2] as i32 {
     // 2 bit rice block header
@@ -335,12 +328,12 @@ fn x3_encode_block<W: ByteWriter>(
 
 #[cfg(test)]
 mod tests {
-  
+
   use crate::bitpacker::BitPacker;
   use crate::bytewriter::{ByteWriter, SliceByteWriter};
   use crate::encoder::{encode_frame, diff, x3_encode_block};
   use crate::x3::Parameters;
-  
+
   extern crate std;
 
   const NUM_SAMPLES: usize = 0x0eff;
@@ -501,9 +494,9 @@ mod tests {
   fn test_x3_encode_block() {
     let wav: &[i16] = &[
       -3461, -3452, -3441, -3456, -3462, -3453, -3461, -3461, -3449, -3457, -3463, -3460, -3454, -3450, -3449, -3452,
-      -3450, -3449, -3463, -3462, -3462
+      -3450, -3449, -3463, -3462, -3462,
     ];
-    let mut wav_diff= diff(wav);
+    let mut wav_diff = diff(wav);
 
     let x3_output: &mut [u8] = &mut [0u8; NUM_SAMPLES * 2 + 1];
     let valid_length = {
@@ -526,8 +519,27 @@ mod tests {
   #[test]
   fn test_x3_encode_block_ftype3() {
     let wav: &[i16] = &[
-      -3554, -3559, -3566, -3563, -3553, -3547, -3543, -3552, -3564, -3563, -3558, -3558, -3557, -3547, -3549, -3552,
-      -3554, -3556, -3566, -3584, -3584 + 11
+      -3554,
+      -3559,
+      -3566,
+      -3563,
+      -3553,
+      -3547,
+      -3543,
+      -3552,
+      -3564,
+      -3563,
+      -3558,
+      -3558,
+      -3557,
+      -3547,
+      -3549,
+      -3552,
+      -3554,
+      -3556,
+      -3566,
+      -3584,
+      -3584 + 11,
     ];
     let mut wav_diff = diff(wav);
 
@@ -554,7 +566,7 @@ mod tests {
   fn test_x3_encode_block_bpf_eq16() {
     let wav: &[i16] = &[
       -32341, -16767, 4562, -1601, 9638, 22598, 14100, -12957, -10471, 29926, -14190, 31863, 29234, -16603, 31762,
-      1319, 11044, -28931, 17888, -14247, -14247
+      1319, 11044, -28931, 17888, -14247, -14247,
     ];
     let mut wav_diff = diff(wav);
 
@@ -583,7 +595,7 @@ mod tests {
   fn test_x3_encode_block_bpf_lt16() {
     let wav: &[i16] = &[
       -3511, -3493, -3494, -3487, -3501, -3502, -3467, -3483, -3506, -3500, -3491, -3501, -3483, -3490, -3495, -3500,
-      -3495, -3492, -3493, -3490, -3490
+      -3495, -3492, -3493, -3490, -3490,
     ];
     let mut wav_diff = diff(wav);
 

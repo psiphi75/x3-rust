@@ -41,5 +41,5 @@ pub mod decoder;
 pub mod encodefile;
 pub mod encoder;
 pub mod error;
-pub mod x3;
 mod utils;
+pub mod x3;

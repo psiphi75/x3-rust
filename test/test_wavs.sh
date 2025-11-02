@@ -26,6 +26,9 @@
 # decompress them, and test the original with the decompressed version.
 # This validates end-to-end compression/decompression.
 #
+
+set -e  # exit on error
+
 TARGET=release
 X3=../target/${TARGET}/x3
 W2S=../target/${TARGET}/wav_to_str

@@ -32,6 +32,7 @@ extern crate hound;
 pub mod bitpacker;
 pub mod bitreader;
 pub mod bytereader;
+pub mod bytewriter;
 pub mod crc;
 #[cfg(feature = "std")]
 pub mod decodefile;

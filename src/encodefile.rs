@@ -22,15 +22,15 @@
 // std
 use std::format;
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::BufWriter;
 use std::path;
-use std::vec;
 
 // externs
 use crate::hound;
 
 // this crate
-use crate::bitpacker::BitPacker;
+use crate::bytewriter::{ByteWriter, SeekFrom, StreamByteWriter};
+use crate::crc::{crc16, update_crc16}; 
 use crate::encoder;
 use crate::error;
 use crate::x3;
@@ -60,19 +60,17 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
   let samples = reader.samples::<i16>().map(|x| x.unwrap());
   let mut first_channel = x3::IterChannel::new(0, samples, sample_rate, params);
 
-  let num_samples = first_channel.wav.len();
-  let mut x3_out = vec![0u8; num_samples * 2];
-
-  let bp = &mut BitPacker::new(&mut x3_out);
-
+  // Open output file
+  // Note: BufWriter is not necessary but can improve performance 
+  let mut x3_output_file = File::create(x3a_filename)?;
+  let mut x3_buffered_writer = BufWriter::new(x3_output_file);
+  let mut x3_output_writer = StreamByteWriter::new(&mut x3_buffered_writer);
+  // let mut x3_output_writer = StreamByteWriter::new(&mut x3_output_file); // if not using BufWriter
+  
   // Output file header
-  create_archive_header(&first_channel, bp)?;
+  create_archive_header(&first_channel, &mut x3_output_writer)?;
 
-  encoder::encode(&mut [&mut first_channel], bp)?;
-
-  // Write to disk
-  let mut file = File::create(x3a_filename)?;
-  file.write_all(bp.as_bytes())?;
+  encoder::encode(&mut [&mut first_channel], &mut x3_output_writer)?;
 
   Ok(())
 }
@@ -80,15 +78,15 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
 //
 // Write <Archive Header> to the BitPacker output.
 //
-fn create_archive_header<I>(ch: &x3::IterChannel<I>, bp: &mut BitPacker) -> Result<(), X3Error> 
+fn create_archive_header<I, W:ByteWriter>(ch: &x3::IterChannel<I>, writer: &mut W) -> Result<(), X3Error> 
   where I: Iterator<Item = i16>
 {
   // <Archive Id>
-  bp.write_bytes(x3::Archive::ID);
+  writer.write_all(x3::Archive::ID)?;
 
   // Make space for the header
-  bp.bookmark();
-  bp.inc_counter_n_bytes(x3::FrameHeader::LENGTH)?;
+  let frame_header_pos = writer.stream_position()?;
+  writer.seek(SeekFrom::Current(x3::FrameHeader::LENGTH as i64))?;
 
   let xml: &str = &[
     // "<X3A>",
@@ -115,17 +113,25 @@ fn create_archive_header<I>(ch: &x3::IterChannel<I>, bp: &mut BitPacker) -> Resu
     // "</X3A>",
   ]
   .concat();
-
-  // <XML MetaData>
-  bp.write_bytes(xml.as_bytes());
-  if xml.len() % 2 == 1 {
+  let xml_bytes = xml.as_bytes();
+// <XML MetaData>
+  let mut payload_len = xml_bytes.len();
+  let mut payload_crc = crc16(xml_bytes);
+  writer.write_all(xml_bytes)?;
+  if payload_len % 2 == 1 {
     // Align to the nearest word
-    bp.write_bits(0, 8);
+    writer.write_all([0u8])?;
+    payload_len += 1;
+    payload_crc = update_crc16(payload_crc, &0u8);
   }
 
   // <Frame Header>
-  encoder::write_frame_header(bp, 0, 0)?;
-
+  // Write the header details
+  let return_position = writer.stream_position()?;
+  writer.seek(SeekFrom::Start(frame_header_pos))?;
+  let frame_header = encoder::write_frame_header(0, 0, payload_len, payload_crc);
+  writer.write_all(frame_header)?;
+  writer.seek(SeekFrom::Start(return_position))?;
   Ok(())
 }
 

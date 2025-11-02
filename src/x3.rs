@@ -45,16 +45,18 @@ impl<'a> Channel<'a> {
 }
 
 pub struct IterChannel<I>
-  where  I: Iterator<Item = i16>
+where
+  I: Iterator<Item = i16>,
 {
   pub id: u16,            // The channel number
-  pub wav: I,         // Raw sample iterator
+  pub wav: I,             // Raw sample iterator
   pub sample_rate: u32,   // The sample rate in Hz
   pub params: Parameters, // X3 encoding parameters
 }
 
-impl<'a, I> IterChannel<I> 
-  where I: Iterator<Item =i16>
+impl<'a, I> IterChannel<I>
+where
+  I: Iterator<Item = i16>,
 {
   pub fn new(id: u16, wav: impl IntoIterator<IntoIter = I>, sample_rate: u32, params: Parameters) -> Self {
     IterChannel {

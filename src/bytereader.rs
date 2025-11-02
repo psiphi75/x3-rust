@@ -80,7 +80,7 @@ impl<'a> ByteReader<'a> {
     }
     false
   }
-  
+
   #[cfg(any(feature = "alloc", feature = "std"))]
   pub fn extract(&self, p_start: usize, p_end: usize) -> Result<Vec<u8>, BitPackError> {
     if p_start > self.array.len() || p_end > self.array.len() {

@@ -28,7 +28,6 @@ use std::string::String;
 use std::vec;
 use std::vec::Vec;
 
-
 // externs
 use crate::hound;
 

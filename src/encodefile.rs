@@ -80,8 +80,9 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
 //
 // Write <Archive Header> to the BitPacker output.
 //
-fn create_archive_header<I>(ch: &x3::IterChannel<I>, bp: &mut BitPacker) -> Result<(), X3Error> 
-  where I: Iterator<Item = i16>
+fn create_archive_header<I>(ch: &x3::IterChannel<I>, bp: &mut BitPacker) -> Result<(), X3Error>
+where
+  I: Iterator<Item = i16>,
 {
   // <Archive Id>
   bp.write_bytes(x3::Archive::ID);

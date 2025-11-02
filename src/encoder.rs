@@ -61,7 +61,7 @@ pub fn encode<'a, I>(channels: &mut [&mut x3::IterChannel<I>], bp: &mut BitPacke
   let stats: &mut [usize; 6] = &mut [0; 6];
 
 
-  #[cfg(any(feature = "alloc", feature = "std"))]
+  #[cfg(any(feature = "alloc", feature = "std"))]{
     loop{
       let frame_buffer = wav.by_ref().take(samples_per_frame).collect::<Vec<i16>>();
       if frame_buffer.len() == 0 {

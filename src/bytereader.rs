@@ -24,6 +24,9 @@ use crate::bitpacker::BitPackError;
 use crate::byteorder::{BigEndian, ByteOrder, LittleEndian};
 use crate::crc::crc16;
 
+#[cfg(any(feature = "alloc", feature = "std"))]
+use alloc::vec::Vec;
+
 //
 // ######                       ######
 // #     # #     # ##### ###### #     # ######   ##   #####  ###### #####
@@ -43,7 +46,7 @@ pub struct ByteReader<'a> {
 }
 
 impl<'a> ByteReader<'a> {
-  pub fn new(array: &'a [u8]) -> ByteReader {
+  pub fn new(array: &'a [u8]) -> ByteReader<'a> {
     ByteReader { array, p_byte: 0 }
   }
 
@@ -77,7 +80,8 @@ impl<'a> ByteReader<'a> {
     }
     false
   }
-
+  
+  #[cfg(any(feature = "alloc", feature = "std"))]
   pub fn extract(&self, p_start: usize, p_end: usize) -> Result<Vec<u8>, BitPackError> {
     if p_start > self.array.len() || p_end > self.array.len() {
       Err(BitPackError::ArrayEndReached)

@@ -19,10 +19,13 @@
  *                                                                        *
  **************************************************************************/
 
+pub type Result<T> = core::result::Result<T, X3Error>;
+
 // We derive `Debug` because all types should probably derive `Debug`.
 // This gives us a reasonable human readable description of `CliError` values.
 #[derive(Debug)]
 pub enum X3Error {
+  #[cfg(feature = "std")]
   Io(std::io::Error),
   Hound(hound::Error),
   BitPack(crate::bitpacker::BitPackError),
@@ -56,6 +59,7 @@ pub enum X3Error {
   FrameDecodeUnexpectedEnd,      // The BitReader has less bytes than the size of the header, but still expects a frame.
 }
 
+#[cfg(feature = "std")]
 impl From<std::io::Error> for X3Error {
   fn from(err: std::io::Error) -> X3Error {
     X3Error::Io(err)

@@ -50,7 +50,7 @@ pub struct BitPacker<'a> {
 }
 
 impl<'a> BitPacker<'a> {
-    pub fn new(array: &'a mut [u8]) -> BitPacker {
+    pub fn new(array: &'a mut [u8]) -> BitPacker<'a> {
         BitPacker {
             array,
             p_byte: 0,

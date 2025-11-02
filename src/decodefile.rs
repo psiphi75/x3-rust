@@ -23,6 +23,11 @@
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
 use std::path;
+use std::println;
+use std::string::String;
+use std::vec;
+use std::vec::Vec;
+
 
 // externs
 use crate::hound;

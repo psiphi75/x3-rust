@@ -20,9 +20,11 @@
  **************************************************************************/
 
 // std
+use std::format;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path;
+use std::vec;
 
 // externs
 use crate::hound;
@@ -55,9 +57,8 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
   let params = x3::Parameters::default();
   let sample_rate = reader.spec().sample_rate;
 
-  // FIXME: This is pretty memory inefficient.  Should process bit by bit
-  let samples = reader.samples::<i16>().map(|x| x.unwrap()).collect::<Vec<i16>>();
-  let first_channel = x3::Channel::new(0, &samples[0..], sample_rate, params);
+  let samples = reader.samples::<i16>().map(|x| x.unwrap());
+  let mut first_channel = x3::IterChannel::new(0, samples, sample_rate, params);
 
   let num_samples = first_channel.wav.len();
   let mut x3_out = vec![0u8; num_samples * 2];
@@ -67,7 +68,7 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
   // Output file header
   create_archive_header(&first_channel, bp)?;
 
-  encoder::encode(&[&first_channel], bp)?;
+  encoder::encode(&mut [&mut first_channel], bp)?;
 
   // Write to disk
   let mut file = File::create(x3a_filename)?;
@@ -79,7 +80,9 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
 //
 // Write <Archive Header> to the BitPacker output.
 //
-fn create_archive_header(ch: &x3::Channel, bp: &mut BitPacker) -> Result<(), X3Error> {
+fn create_archive_header<I>(ch: &x3::IterChannel<I>, bp: &mut BitPacker) -> Result<(), X3Error> 
+  where I: Iterator<Item = i16>
+{
   // <Archive Id>
   bp.write_bytes(x3::Archive::ID);
 

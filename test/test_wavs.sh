@@ -40,7 +40,9 @@ if [ -z ${SOUND_DIR} ] || [ ! -d ${SOUND_DIR} ]; then
 fi
 
 # build it
-cargo build --${TARGET}
+cargo build --${TARGET} --bin="x3" --features="std"
+cargo build --${TARGET} --bin="wav_to_str" --features="std"
+
 
 TEMP_X3A=$(mktemp).x3a
 trap "rm -f $TEMP_X3A" 0 2 3 15
@@ -72,6 +74,7 @@ do
   $W2S --wav $TEMP_WAV > "${TEMP_WAV_STR_TEST}"
   WAV_DIFF=$(cmp "${TEMP_WAV_STR_ORIG}" "${TEMP_WAV_STR_TEST}")
   if [ -n "${WAV_DIFF}" ]; then
+    vbindiff "${WAV}" "${TEMP_WAV}"
     echo "  TEST FAILED"
     echo ${WAV_DIFF}
     exit 1

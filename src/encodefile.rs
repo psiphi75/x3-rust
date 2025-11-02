@@ -61,7 +61,8 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
   let mut first_channel = x3::IterChannel::new(0, samples, sample_rate, params);
 
   // Open output file
-  // Note: BufWriter is not necessary but can improve performance 
+  // Note (MSH): BufWriter is not necessary but should improve performance as
+  //       underlying BitPacker struct performs many single byte writes.
   let mut x3_output_file = File::create(x3a_filename)?;
   let mut x3_buffered_writer = BufWriter::new(x3_output_file);
   let mut x3_output_writer = StreamByteWriter::new(&mut x3_buffered_writer);

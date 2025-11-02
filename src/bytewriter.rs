@@ -8,7 +8,8 @@ pub enum SeekFrom{
 }
 
 ///
-/// 
+/// Generic trait with all functions required to write to underlying seekable memory
+/// structure
 /// 
 pub trait ByteWriter {
     fn align<const N: usize>(&mut self)-> Result<usize>;
@@ -20,6 +21,9 @@ pub trait ByteWriter {
     fn stream_position(&mut self)-> Result<u64>;
 }
 
+///
+/// Wrapper struct implementing ByteWriter trait to an underlying memory slice
+/// 
 pub struct SliceByteWriter<'a> {
     slice: &'a mut [u8],
     p_byte: usize,
@@ -95,6 +99,7 @@ impl<'a> ByteWriter for SliceByteWriter<'a> {
     }
 }
 
+
 #[cfg(feature = "std")]
 pub use stream_byte_writer::*;
 #[cfg(feature = "std")]
@@ -103,6 +108,10 @@ pub mod stream_byte_writer{
     use crate::bytewriter::ByteWriter;
     use crate::error::X3Error;
 
+    ///
+    /// Wrapper Struct implementing ByteWriter trait for any underlying Seek + Write stream 
+    /// (e.g. io::File, io:BufWriter, io::Cursor, etc...)
+    /// 
     pub struct StreamByteWriter<'a, W> 
         where W: Write + Seek
     {

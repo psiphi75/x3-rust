@@ -131,7 +131,7 @@ where
   // Write the header details
   let return_position = writer.stream_position()?;
   writer.seek(SeekFrom::Start(frame_header_pos))?;
-  let frame_header = encoder::write_frame_header(0, 0, payload_len, payload_crc);
+  let frame_header = encoder::write_frame_header(0, 0, 0, 0, payload_len, payload_crc);
   writer.write_all(frame_header)?;
   writer.seek(SeekFrom::Start(return_position))?;
   Ok(())

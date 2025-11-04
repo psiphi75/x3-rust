@@ -57,6 +57,8 @@ pub enum X3Error {
   FrameDecodeInvalidRiceCode,    // The Rice codes are invalid
   FrameDecodeInvalidBPF,         // The BPF decoder blew up, an invalid value was reached.
   FrameDecodeUnexpectedEnd,      // The BitReader has less bytes than the size of the header, but still expects a frame.
+
+  ByteWriterInsufficientMemory,
 }
 
 #[cfg(feature = "std")]

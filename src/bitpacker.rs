@@ -19,6 +19,7 @@
  *                                                                        *
  **************************************************************************/
 
+use crate::crc::update_crc16;
 //
 //      ######          ######
 //      #     # # ##### #     #   ##    ####  #    # ###### #####
@@ -28,6 +29,8 @@
 //      #     # #   #   #       #    # #    # #   #  #      #   #
 //      ######  #   #   #       #    #  ####  #    # ###### #    #
 //
+use crate::error::{Result, X3Error};
+use crate::bytewriter::{ByteWriter, SeekFrom};
 
 #[derive(Debug)]
 pub enum BitPackError {
@@ -40,66 +43,62 @@ pub enum BitPackError {
 ///
 /// BitPacker allows individual bits to be written to an array of bytes.
 ///
-pub struct BitPacker<'a> {
-  array: &'a mut [u8],
+pub struct BitPacker<'a, W: ByteWriter> {
+  writer: &'a mut W,
   // Bit pointer
-  p_byte: usize,
+  scratch_byte: u8,
   p_bit: usize,
-  // Bookmark
-  bm_p_byte: usize,
+  // Len and CRC
+  byte_len: usize,
+  crc: u16,
 }
 
-impl<'a> BitPacker<'a> {
-  pub fn new(array: &'a mut [u8]) -> BitPacker<'a> {
+impl<'a, W: ByteWriter> Drop for BitPacker<'a, W> {
+  fn drop(&mut self) {
+    if self.p_bit != 0 {
+      self.flush().unwrap();
+    }
+  }
+}
+
+impl<'a, W: ByteWriter> BitPacker<'a, W> {
+  pub fn new(writer: &'a mut W) -> BitPacker<'a, W> {
     BitPacker {
-      array,
-      p_byte: 0,
+      writer,
+      scratch_byte: 0,
       p_bit: 0,
-      bm_p_byte: 0,
+      byte_len: 0,
+      crc: 0xffff,
     }
   }
 
-  ///
-  /// Save the current position as a bookmark.  Later we will be
-  /// able to write an array of bytes to this position.
-  ///
-  pub fn bookmark(&mut self) {
-    self.bm_p_byte = self.p_byte;
+  pub fn crc(&self) -> u16 {
+    return self.crc;
   }
 
-  ///
-  /// Get the output array from the bookmark, to the last packed bit.
-  ///
-  pub fn bookmark_get_from(&self) -> &[u8] {
-    &self.array[self.bm_p_byte..self.p_byte]
+  fn flush(&mut self) -> Result<()> {
+    self.crc = update_crc16(self.crc, &self.scratch_byte);
+    self.byte_len += 1;
+    self.writer.write_all([self.scratch_byte])?;
+    self.scratch_byte = 0;
+    self.p_bit = 0;
+    Ok(())
   }
 
-  ///
-  /// Get number of bytes from the bookmark to the current pointer.
-  ///
-  pub fn bookmark_get_offset(&self) -> usize {
-    let offset = if self.p_bit == 0 { 0 } else { 1 };
-    self.p_byte - self.bm_p_byte + offset
-  }
-
-  ///
-  /// Write the array from the bookmark onwards, until array is
-  /// exhausted.
-  ///
-  pub fn bookmark_write(&mut self, array: &[u8]) {
-    for (i, value) in array.iter().enumerate() {
-      self.array[self.bm_p_byte + i] = *value;
-    }
+  pub fn len(&self) -> usize {
+    return self.byte_len;
   }
 
   ///
   /// Standard write an array
   ///
-  pub fn write_bytes(&mut self, array: &[u8]) {
-    for value in array {
-      self.array[self.p_byte] = *value;
-      self.p_byte += 1;
+  pub fn write_bytes(&mut self, array: &[u8]) -> Result<()> {
+    self.byte_len += array.len();
+    for d in array {
+        self.crc = update_crc16(self.crc, d);
     }
+    self.writer.write_all(array)?;
+    Ok(())
   }
 
   ///
@@ -111,25 +110,25 @@ impl<'a> BitPacker<'a> {
   /// ### Arguments
   ///
   /// * `n_bytes` - The number of bytes to increment.
-  pub fn inc_counter_n_bytes(&mut self, n_bytes: usize) -> Result<(), BitPackError> {
+  pub fn inc_counter_n_bytes(&mut self, n_bytes: usize) -> Result<()> {
     if self.p_bit != 0 {
-      return Err(BitPackError::NotByteAligned);
+      return Err(X3Error::BitPack(BitPackError::NotByteAligned));
     }
-    self.p_byte += n_bytes;
+    self.writer.seek(SeekFrom::Current(n_bytes as i64))?;
     Ok(())
   }
 
   ///
   /// Align the packing to the next word, but only if we aren't already aligned.
   ///
-  pub fn word_align(&mut self) {
+  pub fn word_align(&mut self) -> Result<()> {
     if self.p_bit != 0 {
-      self.p_byte += 1;
-      self.p_bit = 0;
+      self.flush()?;
     }
-    if self.p_byte % 2 == 1 {
-      self.p_byte += 1;
+    while 0 != (self.writer.stream_position()? % 2) {
+      self.flush()?;
     }
+    Ok(())
   }
 
   ///
@@ -141,28 +140,26 @@ impl<'a> BitPacker<'a> {
   /// * `num_bits` - The number of bits in `value` that should be written.
   ///
   #[inline(always)]
-  pub fn write_bits(&mut self, mut value: usize, num_bits: usize) {
+  pub fn write_bits(&mut self, mut value: usize, num_bits: usize)-> Result<()> {
     let rem_bit = 8 - self.p_bit;
     let mask = (1 << num_bits) - 1;
     value &= mask;
 
     if num_bits == rem_bit {
-      self.array[self.p_byte] |= value as u8;
-      self.p_byte += 1;
-      self.p_bit = 0;
+      self.scratch_byte |= value as u8;
+      self.flush()?;
     } else if num_bits < rem_bit {
       let shift_l = rem_bit - num_bits;
-      self.array[self.p_byte] |= (value << shift_l) as u8;
+      self.scratch_byte |= (value << shift_l) as u8;
       self.p_bit += num_bits;
     } else {
       let shift_r = num_bits - rem_bit;
-      self.array[self.p_byte] |= (value >> shift_r) as u8;
+      self.scratch_byte |= (value >> shift_r) as u8;
+      self.flush()?;
 
-      self.p_bit = 0;
-      self.p_byte += 1;
-
-      self.write_bits(value, shift_r);
+      self.write_bits(value, shift_r)?;
     }
+    Ok(())
   }
 
   ///
@@ -174,19 +171,8 @@ impl<'a> BitPacker<'a> {
   /// * `num_zeros` - The number of zeros that should be written.
   ///
   #[inline(always)]
-  pub fn write_packed_zeros(&mut self, num_zeros: usize) {
-    self.p_bit += num_zeros;
-    while self.p_bit >= 8 {
-      self.p_bit -= 8;
-      self.p_byte += 1;
-    }
-  }
-
-  ///
-  /// Returns the packed bits as an array.
-  ///
-  pub fn as_bytes(&self) -> &[u8] {
-    &self.array[0..self.p_byte]
+  pub fn write_packed_zeros(&mut self, num_zeros: usize) -> Result<()> {
+    self.write_bits(0, num_zeros)
   }
 }
 
@@ -205,97 +191,100 @@ impl<'a> BitPacker<'a> {
 #[cfg(test)]
 mod tests {
   use crate::bitpacker::BitPacker;
+  use crate::bytewriter::SliceByteWriter;
 
   #[test]
   fn test_write_packed_bits() {
     let inp_arr: &mut [u8] = &mut [0x00, 0x00, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 1;
-    bp.p_bit = 1;
-    bp.write_bits(0x03, 2);
-    assert_eq!(1, bp.p_byte);
-    assert_eq!(3, bp.p_bit);
-    assert_eq!(&[0x00, 0x60, 0x00], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0x0,9);
+      let _ = bp.write_bits(0x3, 2);
+    }
+    assert_eq!(&[0x00, 0x60, 0x00], inp_arr);
 
     let inp_arr: &mut [u8] = &mut [0xff, 0x80, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 1;
-    bp.p_bit = 1;
-    bp.write_bits(0x03, 2);
-    assert_eq!(1, bp.p_byte);
-    assert_eq!(3, bp.p_bit);
-    assert_eq!(&[0xff, 0xE0, 0x00], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0x1ff,9);
+      let _ = bp.write_bits(0x3, 2);
+    }
+    assert_eq!(&[0xff, 0xE0, 0x00], inp_arr);
 
     let inp_arr: &mut [u8] = &mut [0x00, 0x00, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 1;
-    bp.p_bit = 5;
-    bp.write_bits(0x1ff, 9);
-    assert_eq!(2, bp.p_byte);
-    assert_eq!(6, bp.p_bit);
-    assert_eq!(&[0x00, 0x07, 0xfc], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0,13);
+      let _ = bp.write_bits(0x1ff, 9);
+    }
+    assert_eq!(&[0x00, 0x07, 0xfc], inp_arr);
+
 
     let inp_arr: &mut [u8] = &mut [0xff, 0xfc, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 1;
-    bp.p_bit = 5;
-    bp.write_bits(0x1ff, 9);
-    assert_eq!(2, bp.p_byte);
-    assert_eq!(6, bp.p_bit);
-    assert_eq!(&[0xff, 0xff, 0xfc], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0x1fff,13);
+      let _ = bp.write_bits(0x1ff, 9);
+    }
+    assert_eq!(&[0xff, 0xff, 0xfc], inp_arr);
 
     let inp_arr: &mut [u8] = &mut [0x00, 0x00, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 0;
-    bp.p_bit = 6;
-    bp.write_bits(0x1f27b, 17);
-    assert_eq!(2, bp.p_byte);
-    assert_eq!(7, bp.p_bit);
-    assert_eq!(&[0x03, 0xe4, 0xf6], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0,6);
+      let _ = bp.write_bits(0x1f27b, 17);
+    }
+    assert_eq!(&[0x03, 0xe4, 0xf6], inp_arr);
 
     let inp_arr: &mut [u8] = &mut [0xfe, 0x00, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 0;
-    bp.p_bit = 6;
-    bp.write_bits(0x1f27b, 17);
-    assert_eq!(2, bp.p_byte);
-    assert_eq!(7, bp.p_bit);
-    assert_eq!(&[0xff, 0xe4, 0xf6], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0x3f,6);
+      let _ = bp.write_bits(0x1f27b, 17);
+    }
+    assert_eq!(&[0xff, 0xe4, 0xf6], inp_arr);
 
     let inp_arr: &mut [u8] = &mut [0x00, 0x00, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 1;
-    bp.p_bit = 4;
-    bp.write_bits(0x09, 4);
-    assert_eq!(2, bp.p_byte);
-    assert_eq!(0, bp.p_bit);
-    assert_eq!(&[0x00, 0x09, 0x00], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0,12);
+      let _ = bp.write_bits(0x9, 4);
+    }
+    assert_eq!(&[0x00, 0x09, 0x00], inp_arr);
 
     let inp_arr: &mut [u8] = &mut [0xf0, 0x00, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 0;
-    bp.p_bit = 4;
-    bp.write_bits(0xffffbe81, 16);
-    assert_eq!(2, bp.p_byte);
-    assert_eq!(4, bp.p_bit);
-    assert_eq!(&[0xfb, 0xe8, 0x10], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0xf,4);
+      let _ = bp.write_bits(0xffffbe81, 16);
+    }
+    assert_eq!(&[0xfb, 0xe8, 0x10], inp_arr);
+
 
     let inp_arr: &mut [u8] = &mut [0x00, 0x00, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 1;
-    bp.p_bit = 1;
-    bp.write_bits(0xfffffffc, 6);
-    assert_eq!(1, bp.p_byte);
-    assert_eq!(7, bp.p_bit);
-    assert_eq!(&[0x00, 0x78, 0x00], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0,9);
+      let _ = bp.write_bits(0xfffffffc, 6);
+    }
+    assert_eq!(&[0x00, 0x78, 0x00], inp_arr);
 
     let inp_arr: &mut [u8] = &mut [0x00, 0x00, 0x00];
-    let mut bp = BitPacker::new(inp_arr);
-    bp.p_byte = 1;
-    bp.p_bit = 2;
-    bp.write_bits(0xfffffffc, 6);
-    assert_eq!(2, bp.p_byte);
-    assert_eq!(0, bp.p_bit);
-    assert_eq!(&[0x00, 0x3c, 0x00], bp.array);
+    {
+      let writer = &mut SliceByteWriter::new(inp_arr);
+      let mut bp = BitPacker::new(writer);
+      let _ = bp.write_bits(0,10);
+      let _ = bp.write_bits(0xfffffffc, 6);
+    }
+    assert_eq!(&[0x00, 0x3c, 0x00], inp_arr);
   }
 }

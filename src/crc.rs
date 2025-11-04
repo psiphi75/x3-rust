@@ -41,17 +41,22 @@ const CRC_TABLE: [u16; 256] = [
   0x2e93, 0x3eb2, 0x0ed1, 0x1ef0,
 ];
 
+pub fn update_crc16(crc: u16, data: &u8) -> u16 {
+  let lookup: usize = (data ^ (crc >> 8) as u8) as usize;
+  return (crc << 8) ^ CRC_TABLE[lookup];
+}
+
 pub fn crc16(data: &[u8]) -> u16 {
   let mut crc: u16 = 0xffff; // initial CRC value
 
   // calculate the CRC over the data bytes
   for d in data {
-    let lookup: usize = (d ^ (crc >> 8) as u8) as usize;
-    crc = (crc << 8) ^ CRC_TABLE[lookup];
+    crc = update_crc16(crc, d);
   }
 
   crc
 }
+
 
 //
 //

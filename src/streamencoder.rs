@@ -4,37 +4,42 @@ use crate::encoder;
 use crate::error::{Result, X3Error};
 use crate::x3::{self};
 
+/// Optional generic parameters `MAX_CHANNEL_COUNT` and `MAX_BLOCK_LENGTH` set
+/// internal buffer sizes for reduced memory usage when the exact encoding
+/// parameters are known at compile time
 pub struct StreamEncoder<
     'a,
     W: ByteWriter,
-    const CHANNEL_COUNT: usize,
+    const MAX_CHANNEL_COUNT: usize = {x3::Parameters::MAX_CHANNEL_COUNT},
+    const MAX_BLOCK_LENGTH: usize = {x3::Parameters::MAX_BLOCK_LENGTH},
 > {
+    /// output byte stream
     writer: &'a mut W,
     bitpacker_state: Option<BitPackerState>,
     frame_header_position: u64,
-    filter_state: [i16; CHANNEL_COUNT],
-    collected_sample_buffer: [[i16; x3::Parameters::MAX_BLOCK_LENGTH]; CHANNEL_COUNT],
+    filter_state: [i16; MAX_CHANNEL_COUNT],
+    collected_sample_buffer: [[i16; MAX_BLOCK_LENGTH]; MAX_CHANNEL_COUNT],
     next_ch: usize,
     collected_sample_count: usize,
     block_count: usize,
     params: &'a x3::Parameters,
 }
 
-impl<'a, W: ByteWriter, const CH: usize> Drop for StreamEncoder<'a, W, CH> {
+impl<'a, W: ByteWriter, const CH: usize, const BL: usize> Drop for StreamEncoder<'a, W, CH, BL> {
     fn drop(&mut self) {
         let _ = self.encode_block();
         let _ = self.complete_frame();
     }
 }
 
-impl<'a, W: ByteWriter, const CH: usize> StreamEncoder<'a, W, CH> {
+impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, CH, BL> {
     pub fn new(writer: &'a mut W, params: &'a x3::Parameters) -> Self {
         StreamEncoder{
             writer,
             bitpacker_state: None,
             frame_header_position: 0,
             filter_state: [0; CH],
-            collected_sample_buffer : [[0; x3::Parameters::MAX_BLOCK_LENGTH]; CH],
+            collected_sample_buffer : [[0; BL]; CH],
             next_ch: 0,
             collected_sample_count: 0,
             block_count: 0,
@@ -44,7 +49,7 @@ impl<'a, W: ByteWriter, const CH: usize> StreamEncoder<'a, W, CH> {
 
     fn encode_block(&mut self) -> Result<()>{
         if self.bitpacker_state.is_none(){
-            return Ok(())
+            return Ok(()) // At start of new frame nothing to flush
         }
 
         if self.next_ch != 0 {
@@ -55,7 +60,7 @@ impl<'a, W: ByteWriter, const CH: usize> StreamEncoder<'a, W, CH> {
         {
             let block = &block[..self.collected_sample_count];
             // construct diff block 
-            let mut diff = [0i32; x3::Parameters::MAX_BLOCK_LENGTH];
+            let mut diff = [0i32; BL];
             for (i, sample) in block.iter().enumerate() {
                 diff[i]  = i32::from(*sample) - i32::from(*fs);
                 *fs = *sample;
@@ -87,7 +92,7 @@ impl<'a, W: ByteWriter, const CH: usize> StreamEncoder<'a, W, CH> {
             let return_position = self.writer.stream_position()?;
             self.writer.seek(SeekFrom::Start(self.frame_header_position))?;
             // FIXME: Need to add the time
-            let frame_header = encoder::write_frame_header(self.collected_sample_count + 1, 1, CH as u8, 0, payload_len, payload_crc);
+            let frame_header = encoder::write_frame_header(self.collected_sample_count + 1, 1, self.params.channel_count as u8, 0, payload_len, payload_crc);
             self.writer.write_all(frame_header)?;
             self.writer.seek(SeekFrom::Start(return_position))?;
 
@@ -116,7 +121,7 @@ impl<'a, W: ByteWriter, const CH: usize> StreamEncoder<'a, W, CH> {
             /* NEW FRAME */
             if self.bitpacker_state.is_none() {
                 // collect filter states
-                while self.next_ch < CH  {
+                while self.next_ch < self.params.channel_count  {
                     if let Some(fs) = iter.next() {
                         self.filter_state[self.next_ch] = *fs;
                         self.next_ch = self.next_ch + 1;
@@ -146,7 +151,7 @@ impl<'a, W: ByteWriter, const CH: usize> StreamEncoder<'a, W, CH> {
                 if let Some(sample) = iter.next() {
                     self.collected_sample_buffer[self.next_ch][self.collected_sample_count] = *sample;
                     self.next_ch += 1;
-                    if self.next_ch == CH {
+                    if self.next_ch == self.params.channel_count {
                         self.next_ch = 0;
                         self.collected_sample_count += 1;
                     }
@@ -167,6 +172,7 @@ impl<'a, W: ByteWriter, const CH: usize> StreamEncoder<'a, W, CH> {
     }
 }
 
+
 //
 //
 //            #######
@@ -183,7 +189,7 @@ impl<'a, W: ByteWriter, const CH: usize> StreamEncoder<'a, W, CH> {
 mod tests {
     use crate::streamencoder::StreamEncoder;
     use crate::bytewriter::{ByteWriter, SliceByteWriter};
-    use crate::x3::Parameters;
+    use crate::x3::{self, Parameters};
 
     const NUM_SAMPLES: usize = 0x0eff;
 
@@ -213,7 +219,7 @@ mod tests {
       let params = &Parameters::default();
       
       // make stream encoder
-      let mut encoder : StreamEncoder<'_, _ , 1> = StreamEncoder::new(writer, params);
+      let mut encoder : StreamEncoder<_, 1, {x3::Parameters::DEFAULT_BLOCK_LENGTH}> = StreamEncoder::new(writer, params);
       let mut wav_iter = wav.iter();
       let take_3 = wav_iter.by_ref().take(3);
         

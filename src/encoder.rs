@@ -263,10 +263,8 @@ fn encode_rice_block<W: ByteWriter>(
     let ii = (*w + offset as i32) as usize;
     let code = codes[ii];
     let rc_num_bits = num_bits[ii];
-    let num_zeros = rc_num_bits - count_bits(code as u32) as usize;
 
-    bp.write_packed_zeros(num_zeros)?;
-    bp.write_bits(code, rc_num_bits - num_zeros)?;
+    bp.write_bits(code, rc_num_bits)?;
   }
 
   Ok(rc.nsubs)
@@ -555,7 +553,7 @@ mod tests {
       let params = &Parameters::default();
     
       // Run the code
-      let _ = bp.write_packed_zeros(1);
+      let _ = bp.write_bits(0, 1);
       x3_encode_block(&wav[1..], &wav_diff, bp, params).unwrap();
       let _ = bp.word_align();
       bp.len()

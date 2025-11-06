@@ -194,19 +194,6 @@ impl<'a, W: ByteWriter> BitPacker<'a, W> {
     }
     Ok(())
   }
-
-  ///
-  /// This operates together with `write_packed_bits`.  It allows zero values to be written.  Although
-  /// these are never actually written to the array, the offsets are just managed.
-  ///
-  /// ### Arguments
-  ///
-  /// * `num_zeros` - The number of zeros that should be written.
-  ///
-  #[inline(always)]
-  pub fn write_packed_zeros(&mut self, num_zeros: usize) -> Result<()> {
-    self.write_bits(0, num_zeros)
-  }
 }
 
 //

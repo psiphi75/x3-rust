@@ -1,5 +1,6 @@
 use crate::bitpacker::{BitPacker, BitPackerState};
 use crate::bytewriter::{ByteWriter, SeekFrom};
+use crate::crc::{*};
 use crate::encoder;
 use crate::error::{Result, X3Error};
 use crate::x3::{self};
@@ -23,6 +24,7 @@ pub struct StreamEncoder<
     collected_sample_count: usize,
     block_count: usize,
     params: &'a x3::Parameters,
+    sample_rate: u32,
 }
 
 impl<'a, W: ByteWriter, const CH: usize, const BL: usize> Drop for StreamEncoder<'a, W, CH, BL> {
@@ -33,7 +35,86 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> Drop for StreamEncoder
 }
 
 impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, CH, BL> {
+    //
+    // Write <Archive Header> to the ByteWriter output.
+    //
+    fn create_archive_header (
+        &mut self
+    ) -> Result<()> {
+    // <Archive Id>
+    self.writer.write_all(x3::Archive::ID)?;
+
+    // Make space for the header
+    let frame_header_pos = self.writer.stream_position()?;
+    self.writer.seek(SeekFrom::Current(x3::FrameHeader::LENGTH as i64))?;
+    
+    let mut sample_rate_str_buffer = itoa::Buffer::new();
+    let sample_rate_str = sample_rate_str_buffer.format(self.sample_rate);
+
+    let mut block_len_str_buffer = itoa::Buffer::new();
+    let block_len_str = block_len_str_buffer.format(self.params.block_len);
+
+    let mut code_str_buffer_0 = itoa::Buffer::new();
+    let mut code_str_buffer_1 = itoa::Buffer::new();
+    let mut code_str_buffer_2 = itoa::Buffer::new();
+    let code_str = [
+        code_str_buffer_0.format(self.params.codes[0]),
+        code_str_buffer_1.format(self.params.codes[1]),
+        code_str_buffer_2.format(self.params.codes[2]),
+    ];
+
+    let mut threshold_str_buffer_0 = itoa::Buffer::new();
+    let mut threshold_str_buffer_1 = itoa::Buffer::new();
+    let mut threshold_str_buffer_2 = itoa::Buffer::new();
+    let threshold_str = [
+        threshold_str_buffer_0.format(self.params.thresholds[0]),
+        threshold_str_buffer_1.format(self.params.thresholds[1]),
+        threshold_str_buffer_2.format(self.params.thresholds[2]),
+    ];
+
+    let xml: &str = &[
+        // "<X3A>",
+        // "<?xml version=\"1.0\" encoding=\"US-ASCII\" ?>",
+        "<X3ARCH PROG=\"x3new.m\" VERSION=\"2.0\" />",
+        "<CFG ID=\"0\" FTYPE=\"XML\" />",
+        "<CFG ID=\"1\" FTYPE=\"WAV\">",
+        "<FS UNIT=\"Hz\">",sample_rate_str,"</FS>",
+        "<SUFFIX>wav</SUFFIX>",
+        "<CODEC TYPE=\"X3\" VERS=\"2\">",
+        "<BLKLEN>", block_len_str ,"</BLKLEN>",
+        "<CODES N=\"4\">RICE", code_str[0], ",RICE", code_str[1], ",RICE", code_str[2], ",BFP</CODES>",
+        "<FILTER>DIFF</FILTER>",
+        "<NBITS>16</NBITS>",
+        "<T N=\"3\">",threshold_str[0],",",threshold_str[1],",",threshold_str[2],"</T>",
+        "</CODEC>",
+        "</CFG>",
+        // "</X3A>",
+    ]
+    .concat();
+    let xml_bytes = xml.as_bytes();
+    // <XML MetaData>
+    let mut payload_len = xml_bytes.len();
+    let mut payload_crc = crc16(xml_bytes);
+    self.writer.write_all(xml_bytes)?;
+    if payload_len % 2 == 1 {
+        // Align to the nearest word
+        self.writer.write_all([0u8])?;
+        payload_len += 1;
+        payload_crc = update_crc16(payload_crc, &0u8);
+    }
+
+    // <Frame Header>
+    // Write the header details
+    let return_position = self.writer.stream_position()?;
+    self.writer.seek(SeekFrom::Start(frame_header_pos))?;
+    let frame_header = encoder::write_frame_header(0, 0, 0, 0, payload_len, payload_crc);
+    self.writer.write_all(frame_header)?;
+    self.writer.seek(SeekFrom::Start(return_position))?;
+    Ok(())
+    }
+        
     pub fn new(writer: &'a mut W, params: &'a x3::Parameters) -> Self {
+        
         StreamEncoder{
             writer,
             bitpacker_state: None,
@@ -44,6 +125,7 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
             collected_sample_count: 0,
             block_count: 0,
             params,
+            sample_rate: 44100,
         }
     }
 

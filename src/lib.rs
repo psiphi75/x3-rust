@@ -28,6 +28,7 @@ extern crate alloc;
 
 extern crate byteorder;
 extern crate hound;
+extern crate itoa;
 
 pub mod bitpacker;
 pub mod bitreader;

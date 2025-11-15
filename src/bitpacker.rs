@@ -32,6 +32,17 @@ use crate::crc::update_crc16;
 use crate::error::{Result, X3Error};
 use crate::bytewriter::{ByteWriter, SeekFrom};
 
+///
+/// Helper struct used to restore a BitPacker for StreamEncoderCase
+pub struct BitPackerState {
+    // Bit pointer
+    pub scratch_byte: u8,
+    pub p_bit: usize,
+    // Len and CRC
+    pub byte_len: usize,
+    pub crc: u16,
+}
+
 #[derive(Debug)]
 pub enum BitPackError {
   NotByteAligned,      // The bytes are not aligned.
@@ -46,8 +57,8 @@ pub enum BitPackError {
 pub struct BitPacker<'a, W: ByteWriter> {
   writer: &'a mut W,
   // Bit pointer
-  scratch_byte: u8,
-  p_bit: usize,
+  pub scratch_byte: u8,
+  pub p_bit: usize,
   // Len and CRC
   byte_len: usize,
   crc: u16,
@@ -72,6 +83,27 @@ impl<'a, W: ByteWriter> BitPacker<'a, W> {
     }
   }
 
+  pub fn store(mut self)-> BitPackerState {
+    let state = BitPackerState {
+      scratch_byte: self.scratch_byte,
+      p_bit: self.p_bit,
+      byte_len: self.byte_len,
+      crc: self.crc,
+    };
+    self.p_bit = 0; // THIS AVOIDS DROP
+    state
+  }
+
+  pub fn restore(writer:&'a mut W, state: &BitPackerState) -> BitPacker<'a, W>{
+    BitPacker {
+      writer,
+      scratch_byte: state.scratch_byte,
+      p_bit: state.p_bit,
+      byte_len: state.byte_len,
+      crc: state.crc,
+    }
+  }
+
   pub fn crc(&self) -> u16 {
     return self.crc;
   }
@@ -82,6 +114,7 @@ impl<'a, W: ByteWriter> BitPacker<'a, W> {
     self.writer.write_all([self.scratch_byte])?;
     self.scratch_byte = 0;
     self.p_bit = 0;
+    
     Ok(())
   }
 
@@ -160,19 +193,6 @@ impl<'a, W: ByteWriter> BitPacker<'a, W> {
       self.write_bits(value, shift_r)?;
     }
     Ok(())
-  }
-
-  ///
-  /// This operates together with `write_packed_bits`.  It allows zero values to be written.  Although
-  /// these are never actually written to the array, the offsets are just managed.
-  ///
-  /// ### Arguments
-  ///
-  /// * `num_zeros` - The number of zeros that should be written.
-  ///
-  #[inline(always)]
-  pub fn write_packed_zeros(&mut self, num_zeros: usize) -> Result<()> {
-    self.write_bits(0, num_zeros)
   }
 }
 

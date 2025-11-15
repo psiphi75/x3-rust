@@ -25,6 +25,7 @@ hound = "3.4.0"
 quick-xml = "0.38"
 clap = "2.33.1"
 chrono = "0.4.15"
+itoa = "1.0.15"
 
 [features]
 # default = ["std"]

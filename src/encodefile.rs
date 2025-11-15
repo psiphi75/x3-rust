@@ -63,7 +63,7 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
   // Open output file
   // Note (MSH): BufWriter is not necessary but should improve performance as
   //       underlying BitPacker struct performs many single byte writes.
-  let mut x3_output_file = File::create(x3a_filename)?;
+  let x3_output_file = File::create(x3a_filename)?;
   let mut x3_buffered_writer = BufWriter::new(x3_output_file);
   let mut x3_output_writer = StreamByteWriter::new(&mut x3_buffered_writer);
   // let mut x3_output_writer = StreamByteWriter::new(&mut x3_output_file); // if not using BufWriter
@@ -131,7 +131,7 @@ where
   // Write the header details
   let return_position = writer.stream_position()?;
   writer.seek(SeekFrom::Start(frame_header_pos))?;
-  let frame_header = encoder::write_frame_header(0, 0, payload_len, payload_crc);
+  let frame_header = encoder::write_frame_header(0, 0, 0, 0, payload_len, payload_crc);
   writer.write_all(frame_header)?;
   writer.seek(SeekFrom::Start(return_position))?;
   Ok(())

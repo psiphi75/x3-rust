@@ -59,6 +59,13 @@ pub enum X3Error {
   FrameDecodeUnexpectedEnd,      // The BitReader has less bytes than the size of the header, but still expects a frame.
 
   ByteWriterInsufficientMemory,
+
+  //StreamBuilderIssures
+  StreamBuilderNoOutput,
+  StreamBuilderNoSampleRate,
+  
+  EncodeStreamMissingBitpacker,
+  EncodeStreamMismatchedChannelLengths,
 }
 
 #[cfg(feature = "std")]

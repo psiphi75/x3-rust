@@ -79,6 +79,7 @@ pub struct X3aSpec {
 }
 
 pub struct Parameters {
+  pub channel_count: usize,
   pub block_len: usize,
   pub blocks_per_frame: usize,
   pub codes: [usize; 3],
@@ -87,9 +88,11 @@ pub struct Parameters {
 }
 
 impl Parameters {
+  pub const MAX_CHANNEL_COUNT: usize = 8;
   pub const MAX_BLOCK_LENGTH: usize = 60;
   pub const WAV_BIT_SIZE: usize = 16;
 
+  pub const DEFAULT_CHANNEL_COUNT: usize = 1;
   pub const DEFAULT_BLOCK_LENGTH: usize = 20;
   pub const DEFAULT_RICE_CODES: [usize; 3] = [0, 1, 3];
   pub const DEFAULT_THRESHOLDS: [usize; 3] = [3, 8, 20];
@@ -117,6 +120,7 @@ impl Parameters {
       codes,
       thresholds,
       rice_codes,
+      ..Default::default()
     })
   }
 }
@@ -124,6 +128,7 @@ impl Parameters {
 impl Default for Parameters {
   fn default() -> Self {
     Parameters {
+      channel_count: 1,
       block_len: Self::DEFAULT_BLOCK_LENGTH,
       blocks_per_frame: Self::DEFAULT_BLOCKS_PER_FRAME,
       codes: Self::DEFAULT_RICE_CODES,

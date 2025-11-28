@@ -27,65 +27,63 @@
 # This validates end-to-end compression/decompression.
 #
 
-SOUND_DIR=$1
-ALGORITHM=$2
+set -euo pipefail
+
+FLAC="$(which flac) --totally-silent --force"
+X3=../target/release/x3
+if [[ ! -x $X3 ]]; then
+    cargo build --release --bin x3 --features=std
+fi
+
+TIME="$(which time) -f %e,%M" # GNU Time, this is not the usual bash/shell time command
+if [[ -z $(which time) ]]; then
+  echo "GNU Time not found"
+  exit 1
+fi
+
+command -v flac >/dev/null 2>&1 || { echo "flac is required"; exit 1; }
+command -v $X3 >/dev/null 2>&1 || { echo "x3 is required"; exit 1; }
 
 TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" 0 2 3 15
 
-function usage() {
-    echo
-    echo "Usage:"
-    echo "  bench.sh DIRECTORY ALGORITHM"
-    echo
-    echo "Where:"
-    echo "  DIRECTORY is the directory with the source files"
-    echo "  ALGORITHM is the algorithm to test, one of: wav_to_x3a, x3a_to_wav, wav_to_flac, flac_to_wav"
-    exit 1
-}
+# Minimal portable workspace root (script is in test/)
+THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SAMPLES_REPO="https://github.com/psiphi75/underwater-sound-samples"
+CLONE_DIR="${THIS_DIR}/underwater-sound-samples"
+SAMPLES_DIR="${CLONE_DIR}/samples"
 
-if [ -z "${SOUND_DIR}" ] || [ ! -d ${SOUND_DIR} ] || [ -z "${ALGORITHM}" ]; then
-    usage
+# Ensure required tools
+command -v git >/dev/null 2>&1 || { echo "git is required"; exit 1; }
+command -v flac >/dev/null 2>&1 || { echo "flac is required"; exit 1; }
+
+
+# Clone or pull the samples repo
+if [ -d "${CLONE_DIR}/.git" ]; then
+  git -C "${CLONE_DIR}" fetch --all --tags
+  git -C "${CLONE_DIR}" pull --ff-only || git -C "${CLONE_DIR}" pull
+else
+  git clone --depth 1 "$SAMPLES_REPO" "${CLONE_DIR}"
 fi
 
-FLAC="$(which flac) --totally-silent --force"
-X3=$(which x3)
-
-X3=../target/release/x3
-
-# This is not the usual bash/shell time command
-TIME="$(which time) -f %e,%M"
 
 
-case "${ALGORITHM}" in
-    "wav_to_x3a")
-        IN_FILE_EXT="wav"
-        OUT_FILE_EXT="x3a"
-        BENCH_SH=bench_wav_to_x3a
-        ;;
-    "x3a_to_wav")
-        IN_FILE_EXT="x3a"
-        OUT_FILE_EXT="wav"
-        BENCH_SH=bench_x3a_to_wav
-        ;;
-    "wav_to_flac")
-        IN_FILE_EXT="wav"
-        OUT_FILE_EXT="flac"
-        BENCH_SH=bench_wav_to_flac
-        BENCH_PARAMS="--compression-level-0"
-        ;;
-    "flac_to_wav")
-        IN_FILE_EXT="flac"
-        OUT_FILE_EXT="wav"
-        BENCH_SH=bench_flac_to_wav
-        ;;
-    *)
-        usage
-        exit 1
-        ;;
-esac
+# Decompress .flac -> .wav
+shopt -s nullglob
+FLAC_FILES=(${SAMPLES_DIR}/*.flac)
+if [ ${#FLAC_FILES[@]} -eq 0 ]; then
+  echo "No .flac files found in ${SAMPLES_DIR}"
+  exit 1
+fi
 
-
+for f in "${FLAC_FILES[@]}"; do
+    base="$(basename "$f" .flac)"
+    out="${SAMPLES_DIR}/${base}.wav"
+    if [[ ! -f ${out} ]]; then
+        flac -d -s -f -o "$out" "$f"
+    fi
+    cp "$out" $TEMP_DIR
+done
 
 function bench_wav_to_x3a {
     ${TIME} ${X3} --input $1 --output $2
@@ -96,35 +94,83 @@ function bench_x3a_to_wav {
 }
 
 function bench_wav_to_flac {
-    ${TIME} ${FLAC} $1 --output-name="$2" $3
+    ${TIME} ${FLAC} $1 --output-name="$2"
 }
 
 function bench_flac_to_wav {
     ${TIME} ${FLAC} --decode $1 --output-name="$2"
 }
 
+function bench_algo {
+    local in_file_ext=$1
+    local out_file_ext=$2
+    local algorithm="${in_file_ext}_to_${out_file_ext}"
+    local bench_sh="bench_${algorithm}"
+
+    if [[ ${in_file_ext} == "wav" ]]; then
+        local algo=${out_file_ext}
+        local type="comp"
+    else
+        local algo=${in_file_ext}
+        local type="dec"
+    fi
+
+    # Do the benchmark for all the audio files
+    for in_base_file in $FILE_LIST
+    do
+        local in_file="${in_base_file}.${in_file_ext}"
+        local out_file="${in_base_file}.${out_file_ext}"
+
+        local orig_size=$(stat -c%s -- "${in_file}")
+        Totalsize["$algo"|"$type"]=$((${Totalsize["$algo"|"$type"]} + ${orig_size}))
+
+        # Run the benchmark
+        local result="$(${bench_sh} ${in_file} ${out_file} 2>&1 > /dev/null)"
+        local elapsed=${result%%,*}
+        Totaltime["$algo"|"$type"]=$(echo "$elapsed + ${Totaltime[$algo|$type]}" | bc -l)
+        local comp_size=$(stat -c%s -- "$out_file")
+
+        # Choose size to use for MB/s: if input is wav use original size, else use compressed size
+        if [ "${in_file_ext}" == "wav" ]; then
+            Origsize[$algo]=$((Origsize[$algo] + "$orig_size"))
+        fi
+        
+        echo "$(basename ${in_file}),${algorithm},${orig_size},${elapsed},${comp_size}"
+
+    done
+}
+
+declare -A Totalsize
+declare -A Totaltime
+declare -A Origsize
+Totalsize["x3a"|"dec"]=0
+Totalsize["x3a"|"comp"]=0
+Totalsize["flac"|"dec"]=0
+Totalsize["flac"|"comp"]=0
+Totaltime["x3a"|"dec"]=0
+Totaltime["x3a"|"comp"]=0
+Totaltime["flac"|"dec"]=0
+Totaltime["flac"|"comp"]=0
+Origsize["x3a"]=0
+Origsize["x3a"]=0
 
 
-echo "in file,test,in file size (bytes),test params,time,max mem usage (kB),out file size (bytes)"
+FILE_LIST="$(find "${TEMP_DIR}" -name "*.wav" -print0 | while IFS= read -r -d '' f; do printf '%s\n' "${f%.wav}"; done)"
+echo "File,Algorithm,File Size (B),Time,Max Mem Usage (kB),Compressed Size (B)"
+bench_algo wav x3a
+bench_algo x3a wav
+bench_algo wav flac
+bench_algo flac wav
 
-for IN_FILE in $(ls ${SOUND_DIR}/*.${IN_FILE_EXT})
-do
+echo -e "\n"
 
-    # Get the file size, at the same time as loading the file to memory - hoping it stays there
-    SIZE=$(cat ${IN_FILE} | wc -c)
-    
-    echo -n "$(basename ${IN_FILE}),${ALGORITHM},${SIZE},${BENCH_PARAMS},"
+echo "Algorithm,Compression ratio,Compression speed (MB/s),Decompression speed (MB/s)"
+for a in x3a flac; do
+    declare -A mbps
+    for t in comp dec; do
+        mbps[$t]=$(echo "${Origsize[$a]}/${Totaltime[$a|$t]}/1024/1024" | bc -l)
+    done
+    comp_ratio=$(echo "${Totalsize[$a|'dec']}/${Totalsize[$a|'comp']}" | bc -l)
 
-    # Export the timings
-    OUT_FILE=${TEMP_DIR}/$(basename ${IN_FILE}).${OUT_FILE_EXT}
-
-    # Get the benchmark results
-    TIMING="$(${BENCH_SH} ${IN_FILE} ${OUT_FILE} ${BENCH_PARAMS}  2>&1 > /dev/null)"
-    echo -n "${TIMING},"
-
-    SIZE=$(cat ${OUT_FILE} | wc -c)
-    echo ${SIZE}
-
-    rm ${OUT_FILE}
-
+    echo "$a,${comp_ratio},${mbps['comp']},${mbps['dec']}"
 done

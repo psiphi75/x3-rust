@@ -73,7 +73,7 @@ impl<'a, W: ByteWriter> BitPacker<'a, W> {
   }
 
   pub fn crc(&self) -> u16 {
-    return self.crc;
+    self.crc
   }
 
   fn flush(&mut self) -> Result<()> {
@@ -86,7 +86,11 @@ impl<'a, W: ByteWriter> BitPacker<'a, W> {
   }
 
   pub fn len(&self) -> usize {
-    return self.byte_len;
+    self.byte_len
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.byte_len == 0 && self.p_bit == 0
   }
 
   ///

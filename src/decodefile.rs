@@ -94,7 +94,7 @@ impl X3aReader {
     self.read_bytes(header.payload_len)?;
 
     let payload = &self.read_buf[0..header.payload_len];
-    let crc = crc::crc16(&payload);
+    let crc = crc::crc16(payload);
     if crc != header.payload_crc {
       return Err(X3Error::FrameHeaderInvalidPayloadCRC);
     }
@@ -153,7 +153,7 @@ fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, usize),
   let header = {
     let mut header_buf = [0u8; x3::FrameHeader::LENGTH];
     reader.read_exact(&mut header_buf)?;
-    decoder::read_frame_header(&mut header_buf)?
+    decoder::read_frame_header(&header_buf)?
   };
 
   // Get the payload
@@ -199,13 +199,9 @@ pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Res
 
   let mut writer = hound::WavWriter::create(wav_filename, spec)?;
   let mut wav = [0i16; X3_WRITE_BUFFER_SIZE];
-  loop {
-    match x3a_reader.decode_next_frame(&mut wav)? {
-      Some(samples) => {
-        write_samples(&mut writer, &wav, samples)?;
-      }
-      None => break,
-    }
+
+  while let Some(samples) = x3a_reader.decode_next_frame(&mut wav)? {
+    write_samples(&mut writer, &wav, samples)?;
   }
 
   Ok(())
@@ -217,9 +213,9 @@ fn write_samples(
   num_samples: usize,
 ) -> Result<(), X3Error> {
   let mut fast_writer = writer.get_i16_writer(num_samples as u32);
-  for i in 0..num_samples {
+  for s in buf.iter().take(num_samples) {
     unsafe {
-      fast_writer.write_sample_unchecked(buf[i]);
+      fast_writer.write_sample_unchecked(*s);
     }
   }
   fast_writer.flush()?;

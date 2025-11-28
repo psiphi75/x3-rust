@@ -80,7 +80,7 @@ impl<'a> ByteWriter for SliceByteWriter<'a> {
     }
 
     fn stream_position(&mut self)-> Result<u64> {
-        return Ok(self.p_byte as u64);    
+        Ok(self.p_byte as u64)    
     }
 
     fn write_all(&mut self, value: impl AsRef<[u8]>) -> Result<()> {
@@ -144,7 +144,7 @@ pub mod stream_byte_writer{
         }
 
         fn flush(&mut self)-> crate::error::Result<()> {
-            self.writer.flush().map_err(|e| X3Error::Io(e))
+            self.writer.flush().map_err(X3Error::Io)
         }
 
         fn seek(&mut self, pos: SeekFrom)-> crate::error::Result<u64> {

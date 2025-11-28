@@ -48,7 +48,7 @@ use std::vec::Vec;
 /// * `channels` - The list of channels to encode.  // FIXME: This is currently only one.
 /// * `bp` - A `BitPacker` where the compressed data will be written to.
 ///
-pub fn encode<'a, I, W: ByteWriter>(channels: &mut [&mut x3::IterChannel<I>], writer: &mut W) -> Result<(), X3Error> 
+pub fn encode<I, W: ByteWriter>(channels: &mut [&mut x3::IterChannel<I>], writer: &mut W) -> Result<(), X3Error> 
 where 
   I: Iterator<Item = i16>,
 {
@@ -66,7 +66,7 @@ where
   {
     loop {
       let frame_buffer = wav.by_ref().take(samples_per_frame).collect::<Vec<i16>>();
-      if frame_buffer.len() == 0 {
+      if frame_buffer.is_empty() {
         break;
       }
       encode_frame(&frame_buffer, writer, &ch.params, stats)?;
@@ -155,10 +155,10 @@ pub fn write_frame_header(num_samples: usize, id: u8, payload_len: usize, payloa
   p += 2;
 
   // <Payload CRC> = CRC of the payload
-  BigEndian::write_u16(&mut header[p..], payload_crc as u16);
+  BigEndian::write_u16(&mut header[p..], payload_crc);
 
   // Write it back to the bit stream
-  return header
+  header
 }
 
 ///
@@ -247,7 +247,7 @@ fn encode_rice_block<W: ByteWriter>(
   }
 
   // 2 bit rice block header
-  bp.write_bits(ftype as usize + 1, 2)?;
+  bp.write_bits(ftype + 1, 2)?;
   let rc = params.rice_codes[ftype];
   let codes = rc.code;
   let num_bits = rc.num_bits;
@@ -267,10 +267,10 @@ fn encode_rice_block<W: ByteWriter>(
 }
 
 fn encode_bfp_block<W: ByteWriter>(wav_diff: &[i32], bp: &mut BitPacker<W>, num_bits: usize) -> Result<usize, X3Error> {
-  bp.write_bits(num_bits as usize, BFP_HDR_LEN)?;
+  bp.write_bits(num_bits, BFP_HDR_LEN)?;
   // Reduce the number of bits only.
   for wd in wav_diff {
-    bp.write_bits(*wd as usize,num_bits as usize + 1)?;
+    bp.write_bits(*wd as usize, num_bits + 1)?;
   }
   Ok(4)
 }

@@ -43,7 +43,7 @@ const CRC_TABLE: [u16; 256] = [
 
 pub fn update_crc16(crc: u16, data: &u8) -> u16 {
   let lookup: usize = (data ^ (crc >> 8) as u8) as usize;
-  return (crc << 8) ^ CRC_TABLE[lookup];
+  (crc << 8) ^ CRC_TABLE[lookup]
 }
 
 pub fn crc16(data: &[u8]) -> u16 {

@@ -30,7 +30,7 @@ use crate::hound;
 
 // this crate
 use crate::bytewriter::{ByteWriter, SeekFrom, StreamByteWriter};
-use crate::crc::{crc16, update_crc16}; 
+use crate::crc::crc16; 
 use crate::encoder;
 use crate::error;
 use crate::x3;
@@ -63,7 +63,7 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
   // Open output file
   // Note (MSH): BufWriter is not necessary but should improve performance as
   //       underlying BitPacker struct performs many single byte writes.
-  let mut x3_output_file = File::create(x3a_filename)?;
+  let x3_output_file = File::create(x3a_filename)?;
   let mut x3_buffered_writer = BufWriter::new(x3_output_file);
   let mut x3_output_writer = StreamByteWriter::new(&mut x3_buffered_writer);
   // let mut x3_output_writer = StreamByteWriter::new(&mut x3_output_file); // if not using BufWriter
@@ -90,9 +90,10 @@ where
   let frame_header_pos = writer.stream_position()?;
   writer.seek(SeekFrom::Current(x3::FrameHeader::LENGTH as i64))?;
 
+  // Pad to make sure XML section ends on word boundary
+  const PADDING: &str = " ";
+
   let xml: &str = &[
-    // "<X3A>",
-    // "<?xml version=\"1.0\" encoding=\"US-ASCII\" ?>",
     "<X3ARCH PROG=\"x3new.m\" VERSION=\"2.0\" />",
     "<CFG ID=\"0\" FTYPE=\"XML\" />",
     "<CFG ID=\"1\" FTYPE=\"WAV\">",
@@ -112,20 +113,20 @@ where
     ),
     "</CODEC>",
     "</CFG>",
-    // "</X3A>",
+    PADDING
   ]
   .concat();
   let xml_bytes = xml.as_bytes();
 // <XML MetaData>
   let mut payload_len = xml_bytes.len();
-  let mut payload_crc = crc16(xml_bytes);
-  writer.write_all(xml_bytes)?;
+
+  // Align to the nearest word
   if payload_len % 2 == 1 {
-    // Align to the nearest word
-    writer.write_all([0u8])?;
-    payload_len += 1;
-    payload_crc = update_crc16(payload_crc, &0u8);
+    payload_len -= 1;
   }
+  let xml_bytes = &xml_bytes[0..payload_len];
+  let payload_crc = crc16(xml_bytes);
+  writer.write_all(xml_bytes)?;
 
   // <Frame Header>
   // Write the header details

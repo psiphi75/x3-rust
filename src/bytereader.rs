@@ -22,7 +22,6 @@
 // externs
 use crate::bitpacker::BitPackError;
 use crate::byteorder::{BigEndian, ByteOrder, LittleEndian};
-use crate::crc::crc16;
 
 //
 // ######                       ######
@@ -179,11 +178,4 @@ impl<'a> ByteReader<'a> {
     Ok(value)
   }
 
-  pub fn crc16(&self, num_bytes: usize) -> Result<u16, BitPackError> {
-    if self.p_byte + num_bytes > self.array.len() {
-      Err(BitPackError::ArrayEndReached)
-    } else {
-      Ok(crc16(&self.array[self.p_byte..(self.p_byte + num_bytes)]))
-    }
-  }
 }

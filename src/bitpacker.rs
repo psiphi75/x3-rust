@@ -94,18 +94,6 @@ impl<'a, W: ByteWriter> BitPacker<'a, W> {
   }
 
   ///
-  /// Standard write an array
-  ///
-  pub fn write_bytes(&mut self, array: &[u8]) -> Result<()> {
-    self.byte_len += array.len();
-    for d in array {
-        self.crc = update_crc16(self.crc, d);
-    }
-    self.writer.write_all(array)?;
-    Ok(())
-  }
-
-  ///
   /// This operates together with `write_packed_bits`.  It only increments the
   /// `p_bit` value by 1, also incrementing `p_byte` where necessary.
   ///

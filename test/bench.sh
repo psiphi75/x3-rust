@@ -30,9 +30,12 @@
 set -euo pipefail
 
 FLAC="$(which flac) --totally-silent --force"
+cargo build --release --bin x3 --features=std
+
 X3=../target/release/x3
 if [[ ! -x $X3 ]]; then
-    cargo build --release --bin x3 --features=std
+    echo "x3 binary not found at $X3"
+    exit 1
 fi
 
 TIME="$(which time) -f %e,%M" # GNU Time, this is not the usual bash/shell time command

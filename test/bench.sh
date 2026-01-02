@@ -32,23 +32,22 @@ set -euo pipefail
 FLAC="$(which flac) --totally-silent --force"
 cargo build --release --bin x3 --features=std
 
+TEMP_DIR=$(mktemp -d)
+trap "rm -rf $TEMP_DIR" 0 2 3 15
+
 X3=../target/release/x3
 if [[ ! -x $X3 ]]; then
     echo "x3 binary not found at $X3"
     exit 1
 fi
 
-TIME="$(which time) -f %e,%M" # GNU Time, this is not the usual bash/shell time command
-if [[ -z $(which time) ]]; then
-  echo "GNU Time not found"
-  exit 1
+if [[ -z $(which hyperfine) ]]; then
+  apt-get install -y hyperfine
 fi
+TIME="$(which hyperfine) --export-csv ${TEMP_DIR}/timing.csv --time-unit second"
 
 command -v flac >/dev/null 2>&1 || { echo "flac is required"; exit 1; }
 command -v $X3 >/dev/null 2>&1 || { echo "x3 is required"; exit 1; }
-
-TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" 0 2 3 15
 
 # Minimal portable workspace root (script is in test/)
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -89,19 +88,19 @@ for f in "${FLAC_FILES[@]}"; do
 done
 
 function bench_wav_to_x3a {
-    ${TIME} ${X3} --input $1 --output $2
+    ${TIME} "${X3} --input $1 --output $2"
 }
 
 function bench_x3a_to_wav {
-    ${TIME} ${X3} --input $1 --output $2
+    ${TIME} "${X3} --input $1 --output $2"
 }
 
 function bench_wav_to_flac {
-    ${TIME} ${FLAC} $1 --output-name="$2"
+    ${TIME} "${FLAC} $1 --output-name=\"$2\""
 }
 
 function bench_flac_to_wav {
-    ${TIME} ${FLAC} --decode $1 --output-name="$2"
+    ${TIME} "${FLAC} --decode $1 --output-name=\"$2\""
 }
 
 function bench_algo {
@@ -129,8 +128,8 @@ function bench_algo {
 
         # Run the benchmark
         local result="$(${bench_sh} ${in_file} ${out_file} 2>&1 > /dev/null)"
-        local elapsed=${result%%,*}
-        Totaltime["$algo"|"$type"]=$(echo "$elapsed + ${Totaltime[$algo|$type]}" | bc -l)
+        local mean=$(awk -F, 'NR==2{ gsub(/"/,"",$2); print ($2+0); exit }' ${TEMP_DIR}/timing.csv)
+        Totaltime["$algo"|"$type"]=$(echo "$mean + ${Totaltime[$algo|$type]}" | bc -l)
         local comp_size=$(stat -c%s -- "$out_file")
 
         # Choose size to use for MB/s: if input is wav use original size, else use compressed size
@@ -138,7 +137,7 @@ function bench_algo {
             Origsize[$algo]=$((Origsize[$algo] + "$orig_size"))
         fi
         
-        echo "$(basename ${in_file}),${algorithm},${orig_size},${elapsed},${comp_size}"
+        echo "$(basename ${in_file}),${algorithm},${orig_size},${mean},${comp_size}"
 
     done
 }

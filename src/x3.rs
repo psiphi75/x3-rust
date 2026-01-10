@@ -194,7 +194,7 @@ pub struct RiceCode {
   pub offset: usize, // table offset
   pub code: &'static [usize],
   pub num_bits: &'static [usize],
-  pub inv: &'static [i16],
+  pub inv: &'static [i16; 60],
   pub inv_len: usize, // The length of inv that is used for this.
 }
 
@@ -202,7 +202,7 @@ pub struct RiceCodes {}
 
 // The inverse rice code lookup table is the same for all rice codes, although the lower valued
 // rice codes need less than what is provided here
-const INV_RICE_CODE: &[i16] = &[
+const INV_RICE_CODE: &[i16; 60] = &[
   0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6, -7, 7, -8, 8, -9, 9, -10, 10, -11, 11, -12, 12, -13, 13, -14, 14, -15,
   15, -16, 16, -17, 17, -18, 18, -19, 19, -20, 20, -21, 21, -22, 22, -23, 23, -24, 24, -25, 25, -26, 26, -27, 27, -28,
   28, -29, 29, -30,

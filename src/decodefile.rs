@@ -126,7 +126,7 @@ impl X3aReader {
 
     // Do the decoding
     match decoder::decode_frame(x3_bytes, wav_buf, &self.spec.params, samples) {
-      Ok(result) => Ok(result),
+      Ok(result) => Ok(Some(result)),
       Err(err) => {
         self.frame_errors += 1;
         println!("Frame error: {:?}", err);

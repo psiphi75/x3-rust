@@ -34,11 +34,11 @@ pub enum FrameTest {
 }
 
 pub fn decode_frame(
-  x3_bytes: &mut [u8],
+  x3_bytes: &[u8],
   wav_buf: &mut [i16],
   params: &x3::Parameters,
   samples: usize,
-) -> Result<Option<usize>, X3Error> {
+) -> Result<usize, X3Error> {
   let mut last_wav = BigEndian::read_i16(x3_bytes);
   let mut p_wav = 0;
   wav_buf[p_wav] = last_wav;
@@ -54,7 +54,7 @@ pub fn decode_frame(
     p_wav += block_len;
   }
 
-  Ok(Some(p_wav))
+  Ok(p_wav)
 }
 
 ///
@@ -153,7 +153,7 @@ fn decode_ricecode_block_r1(
 ) -> Result<(), X3Error> {
   let code = params.rice_codes[ftype - 1];
   let mut lw = *last_wav;
-  for b in 0..wav.len() {
+  for w in wav {
     let i = br.count_zero_bits();
     br.read_nbits(1); // skip the next bit
 
@@ -162,8 +162,7 @@ fn decode_ricecode_block_r1(
       return Err(X3Error::OutOfBoundsInverse);
     }
     lw += unsafe { code.inv.get_unchecked(i) };
-    let wav_value = unsafe { wav.get_unchecked_mut(b) };
-    *wav_value = lw;
+    *w = lw;
   }
   *last_wav = lw;
   Ok(())
@@ -180,7 +179,7 @@ fn decode_ricecode_block_r2r3(
   let nb = if ftype == 2 { 2 } else { 4 };
   let level = 1 << code.nsubs;
   let mut lw = *last_wav;
-  for b in 0..wav.len() {
+  for w in wav {
     let n = br.count_zero_bits() as i16;
     let r = br.read_nbits(nb) as i16;
     let i = (r + level * (n - 1)) as usize;
@@ -188,8 +187,7 @@ fn decode_ricecode_block_r2r3(
       return Err(X3Error::OutOfBoundsInverse);
     }
     lw += unsafe { code.inv.get_unchecked(i) };
-    let wav_value = unsafe { wav.get_unchecked_mut(b) };
-    *wav_value = lw;
+    *w = lw;
   }
   *last_wav = lw;
   Ok(())
@@ -250,8 +248,9 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> 
 mod tests {
   use crate::bitreader::BitReader;
   use crate::byteorder::{BigEndian, ByteOrder};
-  use crate::decoder::decode_block;
-  use crate::x3;
+  use crate::bytewriter::SliceByteWriter;
+  use crate::decoder::{self, decode_block};
+  use crate::{encoder, x3};
 
   #[test]
   fn test_decode_block_ftype_1() {
@@ -352,5 +351,41 @@ mod tests {
     decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
     assert_eq!(expected_wavput, &mut wav[0..expected_wavput.len()]);
+  }
+
+
+  #[test]
+  fn test_encode_decode_roundtrip() {
+    const WAV_INPUT: &[i16] = &[
+      -3461, -3452, -3441, -3456, -3462, -3453, -3461, -3461, -3449, -3457, -3463, -3460, -3454, -3450, -3449, -3452,
+      -3450, -3449, -3463, -3462, -3453, -3458, -3448, -3447, -3461, -3462, -3452, -3452, -3456, -3459, -3456, -3449,
+      -3444, -3451, -3455, -3449, -3453, -3456, -3455, -3458, -3457, -3450, -3453, -3458, -3456, -3458, -3461, -3451,
+      -3447, -3450, -3461, -3459, -3450, -3450, -3453, -3464, -3463, -3455, -3452, -3457, -3453, -3453, -3453, -3445,
+      -3449, -3450, -3450, -3451, -3452, -3453, -3455, -3455, -3457, -3455, -3452, -3460, -3458, -3463, -3454, -3453,
+      -3458, -3461, -3470, -3464, -3447, -3449, -3456, -3462, -3457, -3449, -3455, -3456, -3448, -3444, -3449, -3442,
+      -3442, -3459, -3462, -3456, -3459, -3454, -3454, -3456, -3454, -3452, -3443, -3456, -3454, -3447, -3453, -3457,
+      -3460, -3456, -3447, -3451, -3459, -3460, -3462, -3459, -3444, -3443, -3445, -3450, -3459, -3451, -3443, -3450,
+      -3452, -3459, -3457, -3456, -3452, -3461, -3467, -3457, -3452, -3449, -3456, -3460, -3454, -3455, -3448, -3439,
+    ];
+    let x3_output: &mut [u8] = &mut [0u8; 1024]; // Allocate more than enough space
+
+    // Encode the original wav data
+    let params = x3::Parameters::default();
+    let writer = &mut SliceByteWriter::new(x3_output);
+    let stats: &mut [usize; 6] = &mut [0; 6];
+    encoder::encode_frame(WAV_INPUT, writer, &params, stats).unwrap();
+
+    // Now decode the data we just encoded
+    let frame_header = decoder::read_frame_header(&x3_output[0..x3::FrameHeader::LENGTH]).unwrap();
+    let samples = frame_header.samples as usize;
+
+    // Get the Payload
+    let x3_output = &x3_output[x3::FrameHeader::LENGTH..];
+
+    // Do the decoding
+    let wav_output = &mut [0i16; WAV_INPUT.len()];
+    decoder::decode_frame(x3_output, wav_output, &params, samples).unwrap();
+
+    assert_eq!(WAV_INPUT, wav_output);
   }
 }

@@ -621,28 +621,4 @@ mod tests {
 
     assert_eq!(expected_x3_output, &x3_output[0..valid_length],);
   }
-
-  // #[test]
-  // fn test_x3_encode_samples() {
-  //   let wav: Vec<i16> = vec![0; 1000];
-
-  //   // Can only handle signed 16 bit data with one channel.
-  //   let params = x3::Parameters::default();
-  //   let sample_rate = 44100;
-  //   let num_samples = wav.len();
-
-  //   // Create the channel data
-  //   let mut first_channel = x3::IterChannel::new(0, wav.into_iter(), sample_rate, params);
-
-  //   // Create the output data
-  //   let x3_len = num_samples * 2;
-  //   let mut x3_out = vec![0u8; x3_len];
-  //   let bp = &mut BitPacker::new(&mut x3_out); // Packer where x3 compressed data is stored.
-
-    
-  //   encoder::encode(&mut [&mut first_channel], bp).unwrap();
-
-  //   // Get the bytes
-  //   let _x3_bytes = bp.as_bytes();
-  // }
 }

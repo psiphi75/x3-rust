@@ -19,6 +19,9 @@ panic = "abort"
 [build-dependencies]
 clippy = { version = "^0.0.302", optional = true }
 
+[dev-dependencies]
+criterion = "0.8"
+
 [dependencies]
 byteorder = { version = "1.3.4", default-features = false }
 hound = "3.5.1"
@@ -41,3 +44,7 @@ required-features = ["std"]
 name = "wav_to_str"
 path = "src/bin/wav_to_str.rs"
 required-features = ["std"]
+
+[[bench]]
+name = "x3-bench"
+harness = false

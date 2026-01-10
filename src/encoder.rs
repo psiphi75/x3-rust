@@ -119,7 +119,7 @@ where
 /// * `num_samples` - The number of samples that are contained in the wav.
 /// * `id` -  The source id.
 ///
-pub fn write_frame_header(num_samples: usize, id: u8, payload_len: usize, payload_crc: u16) -> [u8; x3::FrameHeader::LENGTH] {
+pub fn write_frame_header(num_samples: usize, id: u8, number_channels: u8, timestamp: u64, payload_len: usize, payload_crc: u16) -> [u8; x3::FrameHeader::LENGTH] {
   let mut header =  [0u8; x3::FrameHeader::LENGTH];
 
   // <Frame Key> = "x3"
@@ -132,7 +132,7 @@ pub fn write_frame_header(num_samples: usize, id: u8, payload_len: usize, payloa
   p += 1;
 
   // <Num Channels> = The number of channels
-  header[p] = id;
+  header[p] = number_channels;
   p += 1;
   // FIXME: Should write the `channel.id` value
   // BigEndian::write_u8(&mut header[p..], channel.id);
@@ -146,7 +146,7 @@ pub fn write_frame_header(num_samples: usize, id: u8, payload_len: usize, payloa
   p += 2;
 
   // <Time> = The timestamp of the first sample in the frame.
-  // FIXME: Need to add the time
+  BigEndian::write_u64(&mut header[p..], timestamp);
   p += 8;
 
   // <Header CRC> = CRC of the frame header
@@ -189,13 +189,17 @@ pub fn encode_frame<W: ByteWriter>(
     bp.write_bits(wav[0] as usize, 16)?;
 
     // This techincally has data shared across blocks, so use here instead
-    let mut wav_diff = diff(wav);
+    let mut wav_diff_iter = diff(wav);
     
     let blocks = wav[1..].chunks(params.block_len);
     for block in blocks {
-
       // pack the data block for each channel
-      let ftype = x3_encode_block(block, &mut wav_diff, bp, params)?;
+      let wav_diff: &mut [i32] = &mut [0i32; x3::Parameters::MAX_BLOCK_LENGTH];
+      for (i, wd) in wav_diff_iter.by_ref().take(block.len()).enumerate() {
+        wav_diff[i] = wd;
+      }
+      let trimmed_wav_diff: &[i32] = &wav_diff[..block.len()];
+      let ftype = x3_encode_block(block, trimmed_wav_diff, bp, params)?;
       stats[ftype] += block.len();
     }
 
@@ -207,7 +211,9 @@ pub fn encode_frame<W: ByteWriter>(
   // Write the header details
   let return_position = writer.stream_position()?;
   writer.seek(SeekFrom::Start(frame_header_pos))?;
-  let frame_header = write_frame_header(wav.len(), 1, payload_len, payload_crc);
+  
+  // FIXME: Need to add the time
+  let frame_header = write_frame_header(wav.len(), 1, 1, 0, payload_len, payload_crc);
   writer.write_all(frame_header)?;
   writer.seek(SeekFrom::Start(return_position))?;
   Ok(())
@@ -257,10 +263,8 @@ fn encode_rice_block<W: ByteWriter>(
     let ii = (*w + offset as i32) as usize;
     let code = codes[ii];
     let rc_num_bits = num_bits[ii];
-    let num_zeros = rc_num_bits - count_bits(code as u32) as usize;
 
-    bp.write_packed_zeros(num_zeros)?;
-    bp.write_bits(code, rc_num_bits - num_zeros)?;
+    bp.write_bits(code, rc_num_bits)?;
   }
 
   Ok(rc.nsubs)
@@ -284,22 +288,19 @@ fn encode_literal<W: ByteWriter>(wav: &[i16], bp: &mut BitPacker<W>) -> Result<u
   Ok(5)
 }
 
+
 /// This will encode NSAMPLES of data.
 const BFP_HDR_LEN: usize = 6;
-fn x3_encode_block<W: ByteWriter>(
+pub fn x3_encode_block<W: ByteWriter>(
   wav: &[i16],
-  wav_diff_iter: &mut impl Iterator<Item = i32>,
+  wav_diff: &[i32],
   bp: &mut BitPacker<W>,
   params: &x3::Parameters,
 ) -> Result<usize, X3Error> {
   //collect wav_diff
-  let wav_diff: &mut [i32] = &mut [0i32; x3::Parameters::MAX_BLOCK_LENGTH];
-  let mut max_abs_inp_filtd = 0;
-  for (i, wd) in wav_diff_iter.take(wav.len()).enumerate() {
-    wav_diff[i] = wd;
-    max_abs_inp_filtd = max_abs_inp_filtd.max(wd.abs());
-  }
-  let wav_diff = &wav_diff[..wav.len()];
+  let max_abs_inp_filtd = wav_diff.iter()
+    .map(|x| x.abs())
+    .max().unwrap();
 
   if max_abs_inp_filtd <= params.thresholds[2] as i32 {
     // 2 bit rice block header
@@ -335,6 +336,8 @@ mod tests {
   use crate::x3::Parameters;
 
   extern crate std;
+
+  use std::vec::Vec;
 
   const NUM_SAMPLES: usize = 0x0eff;
 
@@ -496,7 +499,7 @@ mod tests {
       -3461, -3452, -3441, -3456, -3462, -3453, -3461, -3461, -3449, -3457, -3463, -3460, -3454, -3450, -3449, -3452,
       -3450, -3449, -3463, -3462, -3462,
     ];
-    let mut wav_diff = diff(wav);
+    let wav_diff = &diff(wav).collect::<Vec<i32>>();
 
     let x3_output: &mut [u8] = &mut [0u8; NUM_SAMPLES * 2 + 1];
     let valid_length = {
@@ -504,7 +507,7 @@ mod tests {
       let bp = &mut BitPacker::new(writer);
       let params = &Parameters::default();
       // Run the code
-      x3_encode_block(&wav[1..], &mut wav_diff, bp, params).unwrap();
+      x3_encode_block(&wav[1..], &wav_diff, bp, params).unwrap();
       let _ = bp.word_align();
       bp.len()
     };
@@ -541,7 +544,7 @@ mod tests {
       -3584,
       -3584 + 11,
     ];
-    let mut wav_diff = diff(wav);
+    let wav_diff = diff(wav).collect::<Vec<i32>>();
 
     let x3_output: &mut [u8] = &mut [0u8; NUM_SAMPLES * 2 + 1];
     let valid_length = {
@@ -550,8 +553,8 @@ mod tests {
       let params = &Parameters::default();
     
       // Run the code
-      let _ = bp.write_packed_zeros(1);
-      x3_encode_block(&wav[1..], &mut wav_diff, bp, params).unwrap();
+      let _ = bp.write_bits(0, 1);
+      x3_encode_block(&wav[1..], &wav_diff, bp, params).unwrap();
       let _ = bp.word_align();
       bp.len()
     };
@@ -568,7 +571,7 @@ mod tests {
       -32341, -16767, 4562, -1601, 9638, 22598, 14100, -12957, -10471, 29926, -14190, 31863, 29234, -16603, 31762,
       1319, 11044, -28931, 17888, -14247, -14247,
     ];
-    let mut wav_diff = diff(wav);
+    let wav_diff = diff(wav).collect::<Vec<i32>>();
 
     let x3_output: &mut [u8] = &mut [0u8; NUM_SAMPLES * 2 + 1];
     let valid_length = {
@@ -577,7 +580,7 @@ mod tests {
       let params = &Parameters::default();
     
       // Run the code
-      x3_encode_block(&wav[1..], &mut wav_diff, bp, params).unwrap();
+      x3_encode_block(&wav[1..], &wav_diff, bp, params).unwrap();
       let _ = bp.word_align();
       bp.len()
     };
@@ -597,7 +600,7 @@ mod tests {
       -3511, -3493, -3494, -3487, -3501, -3502, -3467, -3483, -3506, -3500, -3491, -3501, -3483, -3490, -3495, -3500,
       -3495, -3492, -3493, -3490, -3490,
     ];
-    let mut wav_diff = diff(wav);
+    let wav_diff = diff(wav).collect::<Vec<i32>>();
 
     let x3_output: &mut [u8] = &mut [0u8; NUM_SAMPLES * 2 + 1];
     let valid_length = {
@@ -606,7 +609,7 @@ mod tests {
       let params = &Parameters::default();
     
       // Run the code
-      x3_encode_block(&wav[1..], &mut wav_diff, bp, params).unwrap();
+      x3_encode_block(&wav[1..], &wav_diff, bp, params).unwrap();
       let _ = bp.word_align();
       bp.len()
     };

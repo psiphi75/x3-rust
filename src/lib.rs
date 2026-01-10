@@ -28,6 +28,7 @@ extern crate alloc;
 
 extern crate byteorder;
 extern crate hound;
+extern crate itoa;
 
 pub mod bitpacker;
 pub mod bitreader;
@@ -41,5 +42,6 @@ pub mod decoder;
 pub mod encodefile;
 pub mod encoder;
 pub mod error;
+pub mod streamencoder;
 mod utils;
 pub mod x3;

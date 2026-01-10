@@ -35,10 +35,10 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> Drop for StreamEncoder
 }
 
 impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, CH, BL> {
-    //
-    // Write <Archive Header> to the ByteWriter output.
-    //
-    fn create_archive_header (
+    ///
+    /// Write <Archive Header> to the x3 stream encoder's ByteWriter output.
+    ///
+    pub fn create_archive_header (
         &mut self
     ) -> Result<()> {
     // <Archive Id>
@@ -75,7 +75,7 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
     let xml: &str = &[
         // "<X3A>",
         // "<?xml version=\"1.0\" encoding=\"US-ASCII\" ?>",
-        "<X3ARCH PROG=\"x3new.m\" VERSION=\"2.0\" />",
+        "<X3ARCH PROG=\"x3::streamencoder.rs\" VERSION=\"1.0\" />",
         "<CFG ID=\"0\" FTYPE=\"XML\" />",
         "<CFG ID=\"1\" FTYPE=\"WAV\">",
         "<FS UNIT=\"Hz\">",sample_rate_str,"</FS>",
@@ -112,7 +112,10 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
     self.writer.seek(SeekFrom::Start(return_position))?;
     Ok(())
     }
-        
+
+    ///
+    /// Create an X3 stream encoder based on input params
+    ///
     pub fn new(writer: &'a mut W, params: &'a x3::Parameters) -> Self {
         
         StreamEncoder{
@@ -186,12 +189,19 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
         Ok(())
     }
 
+    ///
+    /// Closes the current X3 stream encoder flushing any partially encoded blocks 
+    /// and completing the current frame header
+    /// 
     pub fn close(mut self) -> Result<()> {
         self.encode_block()?;
         self.complete_frame()?;
         Ok(())
     }
 
+    ///
+    /// Passes a sample iterator into the X3 stream encoder to be encoded
+    /// 
     pub fn process_interleaved<'f, I>(&mut self, iter: impl IntoIterator<IntoIter = I>) -> Result<()>
     where 
         I: Iterator<Item = &'f i16>
@@ -228,7 +238,7 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
             }
 
             /* Collect block for each channel */
-            // collect a block worth's of samples on all channels
+            // collect a block's worth of samples on all channels
             while  self.collected_sample_count != self.params.block_len {
                 if let Some(sample) = iter.next() {
                     self.collected_sample_buffer[self.next_ch][self.collected_sample_count] = *sample;

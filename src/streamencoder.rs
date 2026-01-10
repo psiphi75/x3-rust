@@ -5,9 +5,11 @@ use crate::encoder;
 use crate::error::{Result, X3Error};
 use crate::x3::{self};
 
+/// 
 /// Optional generic parameters `MAX_CHANNEL_COUNT` and `MAX_BLOCK_LENGTH` set
 /// internal buffer sizes for reduced memory usage when the exact encoding
 /// parameters are known at compile time
+/// 
 pub struct StreamEncoder<
     'a,
     W: ByteWriter,
@@ -310,7 +312,7 @@ mod tests {
       let writer = &mut SliceByteWriter::new(x3_output);
       let params = &Parameters::default();
       
-      // make stream encoder
+      // make stream encoder with 1 channel and default block length
       let mut encoder : StreamEncoder<_, 1, {x3::Parameters::DEFAULT_BLOCK_LENGTH}> = StreamEncoder::new(writer, params);
       let mut wav_iter = wav.iter();
       let take_3 = wav_iter.by_ref().take(3);

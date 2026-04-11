@@ -125,10 +125,7 @@ impl X3aReader {
     let x3_bytes = &mut self.read_buf[0..frame_header.payload_len];
 
     // Do the decoding
-    match decoder::decode_frame::<
-      {x3::Parameters::MAX_CHANNEL_COUNT}, 
-      {x3::Parameters::MAX_BLOCK_LENGTH}
-    >(x3_bytes, wav_buf, &self.spec.params, samples) {
+    match decoder::decode_frame(x3_bytes, wav_buf, &self.spec.params, samples) {
       Ok(result) => Ok(Some(result)),
       Err(err) => {
         self.frame_errors += 1;

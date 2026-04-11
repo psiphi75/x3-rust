@@ -22,7 +22,7 @@
 use std::vec;
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use x3::bytewriter::SliceByteWriter;
-use x3::{decoder, x3};
+use x3::{decoder};
 use x3::encoder::encode_frame;
 use x3::streamencoder::StreamEncoder;
 
@@ -100,7 +100,7 @@ fn decode(c: &mut Criterion, scale: f32) {
   // Benchmark the time and throughput of decoding
   bench_thrpt(c, &label, NUM_SAMPLES * 2, move || {
     let mut wav_output = [0i16; NUM_SAMPLES];
-    decoder::decode_frame::<{x3::x3::Parameters::MAX_CHANNEL_COUNT}, {x3::x3::Parameters::MAX_BLOCK_LENGTH}>(
+    decoder::decode_frame(
       &x3_output[x3::x3::FrameHeader::LENGTH..],
       &mut wav_output,
       &params,

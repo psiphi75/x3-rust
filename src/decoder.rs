@@ -33,25 +33,42 @@ pub enum FrameTest {
   NotFrame,
 }
 
-pub fn decode_frame(
+pub fn decode_frame<
+  const MAX_CHANNEL_COUNT: usize,
+  const MAX_BLOCK_LENGTH: usize,
+>(
   x3_bytes: &[u8],
   wav_buf: &mut [i16],
   params: &x3::Parameters,
   samples: usize,
 ) -> Result<usize, X3Error> {
-  let mut last_wav = BigEndian::read_i16(x3_bytes);
+  let mut last_wav = [0i16; MAX_CHANNEL_COUNT];
   let mut p_wav = 0;
-  wav_buf[p_wav] = last_wav;
-  p_wav += 1;
-  let br = &mut BitReader::new(&x3_bytes[2..]);
+  for ch in 0..params.channel_count {
+    last_wav[ch] = BigEndian::read_i16(&x3_bytes[2*ch..]);
+    wav_buf[p_wav] = last_wav[ch];
+    p_wav += 1;
+  }
+
+  let br = &mut BitReader::new(&x3_bytes[2*params.channel_count..]);
   let mut remaining_samples = samples - 1;
 
   while remaining_samples > 0 {
     let block_len = core::cmp::min(remaining_samples, params.block_len);
-    decode_block(br, &mut wav_buf[p_wav..(p_wav + block_len)], &mut last_wav, params)?;
 
+    // Collect a block for each channel
+    let mut decoded_block_buffers = [[0i16; MAX_BLOCK_LENGTH]; MAX_CHANNEL_COUNT];
+    for ch in 0..params.channel_count {
+      decode_block(br, &mut decoded_block_buffers[ch][..block_len], &mut last_wav[ch], params)?;
+    }
+    // De interlace the channels
+    for i in 0..block_len {
+      for ch in 0..params.channel_count {
+        wav_buf[p_wav] = decoded_block_buffers[ch][i];
+        p_wav += 1;
+      }
+    }
     remaining_samples -= block_len;
-    p_wav += block_len;
   }
 
   Ok(p_wav)
@@ -384,7 +401,7 @@ mod tests {
 
     // Do the decoding
     let wav_output = &mut [0i16; WAV_INPUT.len()];
-    decoder::decode_frame(x3_output, wav_output, &params, samples).unwrap();
+    decoder::decode_frame::<{x3::Parameters::MAX_CHANNEL_COUNT}, {x3::Parameters::MAX_BLOCK_LENGTH}>(x3_output, wav_output, &params, samples).unwrap();
 
     assert_eq!(WAV_INPUT, wav_output);
   }

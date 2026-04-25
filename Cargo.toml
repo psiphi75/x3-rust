@@ -2,7 +2,7 @@
 name = "x3"
 description = "A CPU efficient audio encoder/decoder using the X3 codec."
 version = "0.3.1"
-authors = ["Simon M. Werner <simonwerner@gmail.com>"]
+authors = ["Simon M. Werner <simonwerner@gmail.com>", "Michael Salino-Hugg <michaelsh12391@gmail.com>"]
 license = "GPL-3.0-or-later"
 readme = "README.md"
 edition = "2024"
@@ -23,16 +23,19 @@ clippy = { version = "^0.0.302", optional = true }
 criterion = "0.8"
 
 [dependencies]
-byteorder = { version = "1.3.4", default-features = false }
-hound = "3.5.1"
-quick-xml = "0.38"
-clap = "2.33.1"
-chrono = "0.4.15"
 itoa = "1.0.15"
+byteorder = { version = "1.3.4", default-features = false }
+
+# std dependencies
+hound = { version = "3.5.1", optional = true }
+quick-xml = { version = "0.38", optional = true }
+clap = { version = "2.33.1", optional = true }
+chrono = { version = "0.4.15", optional = true }
 
 [features]
 # default = ["std"]
-std = []
+
+std = ["dep:hound", "dep:quick-xml", "dep:clap", "dep:chrono"]
 alloc = []
 
 [[bin]]

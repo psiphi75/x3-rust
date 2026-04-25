@@ -27,6 +27,7 @@ pub type Result<T> = core::result::Result<T, X3Error>;
 pub enum X3Error {
   #[cfg(feature = "std")]
   Io(std::io::Error),
+  #[cfg(feature = "std")]
   Hound(hound::Error),
   BitPack(crate::bitpacker::BitPackError),
 
@@ -75,6 +76,7 @@ impl From<std::io::Error> for X3Error {
   }
 }
 
+#[cfg(feature = "std")]
 impl From<hound::Error> for X3Error {
   fn from(err: hound::Error) -> X3Error {
     X3Error::Hound(err)

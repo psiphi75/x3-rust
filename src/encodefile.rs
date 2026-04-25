@@ -26,7 +26,7 @@ use std::io::BufWriter;
 use std::path;
 
 // externs
-use crate::hound;
+extern crate hound;
 
 // this crate
 use crate::bytewriter::{ByteWriter, SeekFrom, StreamByteWriter};

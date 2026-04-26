@@ -76,7 +76,7 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
         threshold_str_buffer_2.format(self.params.thresholds[2]),
     ];
 
-    let xml: &str = &[
+    let xml_parts: &[&str] = &[
         // "<X3A>",
         // "<?xml version=\"1.0\" encoding=\"US-ASCII\" ?>",
         "<X3ARCH PROG=\"x3::streamencoder.rs\" VERSION=\"1.0\" />",
@@ -93,13 +93,20 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
         "</CODEC>",
         "</CFG>",
         // "</X3A>",
-    ]
-    .concat();
-    let xml_bytes = xml.as_bytes();
+    ];
+
     // <XML MetaData>
-    let mut payload_len = xml_bytes.len();
-    let mut payload_crc = crc16(xml_bytes);
-    self.writer.write_all(xml_bytes)?;
+    let mut payload_len = 0;
+    let mut payload_crc = crc16(&[]);
+    for part in xml_parts {
+        let xml_bytes = part.as_bytes();
+        payload_len += xml_bytes.len();
+        for byte in xml_bytes {
+            payload_crc = update_crc16(payload_crc,byte);
+        }
+        self.writer.write_all(xml_bytes)?;
+    }
+
     if payload_len % 2 == 1 {
         // Align to the nearest word
         self.writer.write_all([0u8])?;

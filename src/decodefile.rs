@@ -29,7 +29,7 @@ use std::vec;
 use std::vec::Vec;
 
 // externs
-use crate::hound;
+extern crate hound;
 
 // this crate
 use crate::decoder;

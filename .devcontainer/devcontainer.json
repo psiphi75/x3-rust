@@ -14,5 +14,6 @@
 			]
 		}
 	},
-	"workspaceFolder": "/workspaces/x3-rust"
+	"workspaceFolder": "/workspaces/x3-rust",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/x3-rust,type=bind,consistency=cached"
 }

@@ -22,8 +22,9 @@
 use std::vec;
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use x3::bytewriter::SliceByteWriter;
-use x3::decoder;
+use x3::{decoder};
 use x3::encoder::encode_frame;
+use x3::streamencoder::StreamEncoder;
 
 const NUM_SAMPLES: usize = 16 * 1024;
 
@@ -61,7 +62,23 @@ fn encode(c: &mut Criterion, scale: f32) {
     let stats: &mut [usize; 6] = &mut [0; 6];
     encode_frame(&wav, writer, params, stats).unwrap();
   });
+}
 
+fn stream_encode(c: &mut Criterion, scale: f32) {
+  // Create the WAV buffer and the label for the benchmark
+  let wav = create_wav_buffer(scale);
+  let label = format!("stream_encode_frame - {}", scale);
+
+  // Benchmark the time and throughput of encoding
+  bench_thrpt(c, &label, wav.len() * 2, move || {
+    let x3_output: &mut [u8] = &mut [0u8; NUM_SAMPLES * 2];
+    let writer = &mut SliceByteWriter::new(x3_output);
+    let params = &x3::x3::Parameters::default();
+
+    let mut encoder : StreamEncoder<_, 1, {x3::x3::Parameters::DEFAULT_BLOCK_LENGTH}> = StreamEncoder::new(writer, params);
+    let _ = encoder.process_interleaved(wav.iter());
+    let _ = encoder.close();
+  });
 }
 
 fn decode(c: &mut Criterion, scale: f32) {
@@ -98,6 +115,10 @@ fn criterion_benchmark(c: &mut Criterion) {
   encode(c, 0.0);   // Targets Rice-0 encoding
   encode(c, 0.03);  // Targets Rice-0, Rice-1, and Rice-3 encoding
   encode(c, 0.5);   // Targets BPF encoding
+
+  stream_encode(c, 0.0);   // Targets Rice-0 encoding
+  stream_encode(c, 0.03);  // Targets Rice-0, Rice-1, and Rice-3 encoding
+  stream_encode(c, 0.5);   // Targets BPF encoding
 
   decode(c, 0.0);   // Targets Rice-0 encoding
   decode(c, 0.03);  // Targets Rice-0, Rice-1, and Rice-3 encoding

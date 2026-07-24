@@ -104,6 +104,10 @@ impl Parameters {
     codes: [usize; 3],
     thresholds: [usize; 3],
   ) -> Result<Self, X3Error> {
+    if block_len > Self::MAX_BLOCK_LENGTH {
+      return Err(X3Error::InvalidBlockLength);
+    }
+
     let rice_codes = RiceCodes::get(codes);
 
     // setup the codes

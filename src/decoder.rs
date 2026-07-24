@@ -39,6 +39,13 @@ pub fn decode_frame(
   params: &x3::Parameters,
   samples: usize,
 ) -> Result<usize, X3Error> {
+  if params.channel_count > x3::Parameters::MAX_CHANNEL_COUNT {
+    return Err(X3Error::InvalidChannelCount);
+  }
+  if params.block_len > x3::Parameters::MAX_BLOCK_LENGTH {
+    return Err(X3Error::InvalidBlockLength);
+  }
+
   let mut last_wav = [0i16; x3::Parameters::MAX_CHANNEL_COUNT];
   let mut p_wav = 0;
   for ch in 0..params.channel_count {
@@ -402,5 +409,48 @@ mod tests {
     decoder::decode_frame(x3_output, wav_output, &params, samples).unwrap();
 
     assert_eq!(WAV_INPUT, wav_output);
+  }
+
+  #[test]
+  fn test_encode_decode_roundtrip_multichannel() {
+    const CHANNEL_COUNT: usize = 3;
+    const SAMPLES_PER_CHANNEL: usize = 45; // spans multiple default-sized (20-sample) blocks
+
+    // Interleaved multichannel wav data: each channel follows a distinct waveform so a
+    // channel mix-up in (de)interleaving would produce a mismatch, not an accidental pass.
+    let mut wav_input = [0i16; CHANNEL_COUNT * SAMPLES_PER_CHANNEL];
+    for i in 0..SAMPLES_PER_CHANNEL {
+      for ch in 0..CHANNEL_COUNT {
+        wav_input[i * CHANNEL_COUNT + ch] = (i as i16) * (ch as i16 + 1) - 500;
+      }
+    }
+
+    let params = x3::Parameters {
+      channel_count: CHANNEL_COUNT,
+      ..x3::Parameters::default()
+    };
+
+    // Encode the interleaved multichannel data
+    let x3_output: &mut [u8] = &mut [0u8; 4096];
+    let valid_len = {
+      let writer = &mut SliceByteWriter::new(x3_output);
+      let mut encoder: StreamEncoder<_, CHANNEL_COUNT, { x3::Parameters::DEFAULT_BLOCK_LENGTH }> =
+        StreamEncoder::new(writer, &params);
+      let _ = encoder.process_interleaved(wav_input.iter());
+      let _ = encoder.close();
+      writer.stream_position().unwrap() as usize
+    };
+
+    // Now decode the data we just encoded
+    let frame_header = decoder::read_frame_header(&x3_output[0..x3::FrameHeader::LENGTH]).unwrap();
+    assert_eq!(frame_header.channels as usize, CHANNEL_COUNT);
+    let samples = frame_header.samples as usize;
+    assert_eq!(samples, SAMPLES_PER_CHANNEL);
+
+    let payload = &x3_output[x3::FrameHeader::LENGTH..valid_len];
+    let wav_output = &mut [0i16; CHANNEL_COUNT * SAMPLES_PER_CHANNEL];
+    decoder::decode_frame(payload, wav_output, &params, samples).unwrap();
+
+    assert_eq!(&wav_input[..], &wav_output[..]);
   }
 }

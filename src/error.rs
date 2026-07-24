@@ -35,6 +35,8 @@ pub enum X3Error {
   InvalidEncodingThresh, // Threshold must be less than or equal to code.offset
   OutOfBoundsInverse,    // The value is out-of-bounds for the .inv array.
   MoreThanOneChannel,    // FIXME: We need to support more than one channel
+  InvalidBlockLength,    // block_len exceeds Parameters::MAX_BLOCK_LENGTH
+  InvalidChannelCount,   // channel_count exceeds Parameters::MAX_CHANNEL_COUNT
 
   // X3 Archive Header errors
   ArchiveHeaderXMLInvalid,    // XML is poorly structured

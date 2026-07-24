@@ -120,6 +120,11 @@ impl X3aReader {
       return Err(X3Error::FrameHeaderInvalidPayloadLen);
     }
 
+    // The archive header's XML does not carry the channel count, so each data
+    // frame's own header is the source of truth for it.
+    self.spec.channels = frame_header.channels;
+    self.spec.params.channel_count = frame_header.channels as usize;
+
     // Get the Payload
     self.read_frame_payload(&frame_header)?;
     let x3_bytes = &mut self.read_buf[0..frame_header.payload_len];
@@ -188,17 +193,23 @@ fn read_archive_header(reader: &mut BufReader<File>) -> Result<(X3aSpec, usize),
 ///
 pub fn x3a_to_wav<P: AsRef<path::Path>>(x3a_filename: P, wav_filename: P) -> Result<(), X3Error> {
   let mut x3a_reader = X3aReader::open(x3a_filename)?;
+  let mut wav = [0i16; X3_WRITE_BUFFER_SIZE];
+
+  // The channel count isn't known until the first data frame's header has been read
+  let Some(first_frame_samples) = x3a_reader.decode_next_frame(&mut wav)? else {
+    return Ok(());
+  };
 
   let x3_spec = x3a_reader.spec();
   let spec = hound::WavSpec {
-    channels: 1, //x3_spec.channels as u16,
+    channels: x3_spec.channels as u16,
     sample_rate: x3_spec.sample_rate,
     bits_per_sample: 16,
     sample_format: hound::SampleFormat::Int,
   };
 
   let mut writer = hound::WavWriter::create(wav_filename, spec)?;
-  let mut wav = [0i16; X3_WRITE_BUFFER_SIZE];
+  write_samples(&mut writer, &wav, first_frame_samples)?;
 
   while let Some(samples) = x3a_reader.decode_next_frame(&mut wav)? {
     write_samples(&mut writer, &wav, samples)?;

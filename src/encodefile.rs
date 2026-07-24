@@ -30,7 +30,7 @@ extern crate hound;
 
 // this crate
 use crate::bytewriter::{ByteWriter, SeekFrom, StreamByteWriter};
-use crate::crc::crc16; 
+use crate::crc::crc16;
 use crate::encoder;
 use crate::error;
 use crate::x3;
@@ -38,7 +38,7 @@ use crate::x3;
 use error::X3Error;
 
 ///
-/// Convert a .wav file to an .x3a (X3 Archive) file.  
+/// Convert a .wav file to an .x3a (X3 Archive) file.
 ///
 /// ### Arguments
 ///
@@ -50,9 +50,6 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
 
   // Can only handle 16 bit data
   assert_eq!(reader.spec().bits_per_sample, 16);
-
-  // FIXME: We want to be able to handle multiple channels
-  assert_eq!(reader.spec().channels, 1);
 
   let params = x3::Parameters::default();
   let sample_rate = reader.spec().sample_rate;
@@ -67,7 +64,7 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
   let mut x3_buffered_writer = BufWriter::new(x3_output_file);
   let mut x3_output_writer = StreamByteWriter::new(&mut x3_buffered_writer);
   // let mut x3_output_writer = StreamByteWriter::new(&mut x3_output_file); // if not using BufWriter
-  
+
   // Output file header
   create_archive_header(&first_channel, &mut x3_output_writer)?;
 
@@ -79,8 +76,8 @@ pub fn wav_to_x3a<P: AsRef<path::Path>>(wav_filename: P, x3a_filename: P) -> Res
 //
 // Write <Archive Header> to the BitPacker output.
 //
-fn create_archive_header<I, W:ByteWriter>(ch: &x3::IterChannel<I>, writer: &mut W) -> Result<(), X3Error> 
-where 
+fn create_archive_header<I, W:ByteWriter>(ch: &x3::IterChannel<I>, writer: &mut W) -> Result<(), X3Error>
+where
   I: Iterator<Item = i16>,
 {
   // <Archive Id>

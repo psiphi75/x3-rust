@@ -68,8 +68,8 @@ pub fn decode_frame(
 
     // Interleave the channel samples
     for i in 0..block_len {
-      for ch in 0..params.channel_count {
-        wav_buf[p_wav] = decoded_block_buffers[ch][i];
+      for buf in decoded_block_buffers.iter().take(params.channel_count) {
+        wav_buf[p_wav] = buf[i];
         p_wav += 1;
       }
     }
@@ -111,8 +111,8 @@ pub fn read_frame_header(bytes: &[u8]) -> Result<FrameHeader, X3Error> {
 
   // <Num Channels>
   let channels = bytes[FrameHeader::P_CHANNELS];
-  if channels > 1 {
-    return Err(X3Error::MoreThanOneChannel);
+  if channels as usize > x3::Parameters::MAX_CHANNEL_COUNT {
+    return Err(X3Error::InvalidChannelCount);
   }
 
   // <Num Samples>
@@ -270,8 +270,9 @@ fn decode_bpf_block(br: &mut BitReader, wav: &mut [i16], last_wav: &mut i16) -> 
 mod tests {
   use crate::bitreader::BitReader;
   use crate::byteorder::{BigEndian, ByteOrder};
-  use crate::bytewriter::SliceByteWriter;
+  use crate::bytewriter::{ByteWriter, SliceByteWriter};
   use crate::decoder::{self, decode_block};
+  use crate::streamencoder::StreamEncoder;
   use crate::{encoder, x3};
 
   #[test]
@@ -312,7 +313,7 @@ mod tests {
     ];
 
     let mut last_wav = BigEndian::read_i16(&x3_inp[0..2]);
-    let mut br = BitReader::new(&mut x3_inp[2..]);
+    let mut br = BitReader::new(&x3_inp[2..]);
     let params = &x3::Parameters::default();
     decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
@@ -329,7 +330,7 @@ mod tests {
     ];
 
     let mut last_wav = BigEndian::read_i16(&x3_inp[0..2]);
-    let mut br = BitReader::new(&mut x3_inp[2..]);
+    let mut br = BitReader::new(&x3_inp[2..]);
     let params = &x3::Parameters::default();
     decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
@@ -349,7 +350,7 @@ mod tests {
     ];
 
     let mut last_wav = BigEndian::read_i16(&x3_inp[0..2]);
-    let mut br = BitReader::new(&mut x3_inp[2..]);
+    let mut br = BitReader::new(&x3_inp[2..]);
     let params = &x3::Parameters::default();
     decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 
@@ -368,7 +369,7 @@ mod tests {
     ];
 
     let mut last_wav = BigEndian::read_i16(&x3_inp[0..2]);
-    let mut br = BitReader::new(&mut x3_inp[2..]);
+    let mut br = BitReader::new(&x3_inp[2..]);
     let params = &x3::Parameters::default();
     decode_block(&mut br, wav, &mut last_wav, params).unwrap();
 

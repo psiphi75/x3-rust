@@ -43,7 +43,7 @@ fn create_wav_buffer(scaler: f32) -> Vec<i16> {
   let mut wav: Vec<i16> = Vec::with_capacity(NUM_SAMPLES);
   for i in 0..NUM_SAMPLES {
     let t = std::f32::consts::PI * i as f32 / 180.0;
-    let sample = (t.sin()) * scaler * i16::max_value() as f32;
+    let sample = (t.sin()) * scaler * i16::MAX as f32;
     wav.push(sample as i16);
   }
   wav

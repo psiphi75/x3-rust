@@ -414,7 +414,7 @@ mod tests {
 
     let expected_x3_output: &[u8] = &[
       // Frame header
-      'x' as u8, '3' as u8, // "x3"
+      b'x', b'3', // "x3"
       1, 1, // Source Id, Num Channels
       wlh, wll, // Num samples
       2, 144, // Num encoded bytes
@@ -507,7 +507,7 @@ mod tests {
       let bp = &mut BitPacker::new(writer);
       let params = &Parameters::default();
       // Run the code
-      x3_encode_block(&wav[1..], &wav_diff, bp, params).unwrap();
+      x3_encode_block(&wav[1..], wav_diff, bp, params).unwrap();
       let _ = bp.word_align();
       bp.len()
     };

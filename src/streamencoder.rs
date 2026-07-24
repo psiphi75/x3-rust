@@ -165,7 +165,7 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
 
             if let Some(bp_state) = &self.bitpacker_state {
                 let mut bp = BitPacker::restore(self.writer, bp_state);
-                encoder::x3_encode_block(block, &diff, &mut bp, self.params)?;
+                encoder::x3_encode_block(block, diff, &mut bp, self.params)?;
                 self.bitpacker_state = Some(bp.store());
             } else {
                 return Err(X3Error::EncodeStreamMissingBitpacker);
@@ -208,7 +208,7 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
     /// 
     pub fn close(mut self) -> Result<()> {
         if self.collected_sample_count != 0 {
-            let _ = self.encode_block()?;
+            self.encode_block()?;
         }
         self.complete_frame()?;
         Ok(())
@@ -231,7 +231,7 @@ impl<'a, W: ByteWriter, const CH: usize, const BL: usize> StreamEncoder<'a, W, C
                 while self.next_ch < self.params.channel_count  {
                     if let Some(fs) = iter.next() {
                         self.filter_state[self.next_ch] = *fs;
-                        self.next_ch = self.next_ch + 1;
+                        self.next_ch += 1;
                     } else {
                         return Ok(()); // wait for more samples
                     }
@@ -419,9 +419,9 @@ mod tests {
       let mut wav_iter = wav.iter();
         
       // stream some samples
-      let _ = encoder.process_interleaved(wav_iter.by_ref().take(21)).unwrap();
-      let _ = encoder.process_interleaved(wav_iter.by_ref().take(3)).unwrap();
-      let _ = encoder.process_interleaved(wav_iter.by_ref().take(44)).unwrap();
+      encoder.process_interleaved(wav_iter.by_ref().take(21)).unwrap();
+      encoder.process_interleaved(wav_iter.by_ref().take(3)).unwrap();
+      encoder.process_interleaved(wav_iter.by_ref().take(44)).unwrap();
 
       // stream remaining samples
       let _ = encoder.process_interleaved(wav_iter);
